@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import type { FieldRow } from "../view-model";
+import { unresolvedCount, type FieldRow } from "../view-model";
 import { approveAction, requestChangesAction, issueAction } from "@/app/actions/review";
 
 const bandStyle: Record<string, string> = {
@@ -11,10 +11,10 @@ const bandStyle: Record<string, string> = {
 
 export function ReviewClient(props: {
   reportId: string; status: string; rows: FieldRow[]; transcript: string;
-  canApprove: boolean; photoCount: number;
+  canApprove: boolean; canIssue: boolean; photoCount: number;
 }) {
   const [selected, setSelected] = useState<string | null>(null);
-  const unresolved = props.rows.filter((r) => r.band !== "Supported").length;
+  const unresolved = unresolvedCount(props.rows);
 
   return (
     <main className="mx-auto grid max-w-5xl gap-4 p-6 md:grid-cols-2">
@@ -51,7 +51,7 @@ export function ReviewClient(props: {
             </form>
           </div>
         )}
-        {props.status === "APPROVED" && props.canApprove && (
+        {props.status === "APPROVED" && props.canIssue && (
           <form action={issueAction}>
             <input type="hidden" name="reportId" value={props.reportId} />
             <button className="w-full rounded-control bg-brand-900 py-2 text-white">Issue PDF</button>

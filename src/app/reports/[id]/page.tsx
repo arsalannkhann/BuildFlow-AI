@@ -20,6 +20,7 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
 
   return (
     <ReviewClient reportId={id} status={report.status} rows={rows} transcript={transcript}
-      canApprove={ctx.capabilities.includes("report.approve")} photoCount={photoIds.length} />
+      canApprove={ctx.capabilities.includes("report.approve")}
+      canIssue={ctx.capabilities.includes("report.issue")} photoCount={photoIds.length} />
   );
 }
