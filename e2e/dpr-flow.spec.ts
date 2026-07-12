@@ -21,7 +21,9 @@ test("capture -> process -> review -> approve -> issue -> download", async ({ pa
   // Lands on the report; mock processing already completed -> AWAITING_REVIEW + mock work item.
   await expect(page).toHaveURL(/\/reports\/.+/, { timeout: 30000 });
   await expect(page.getByText("AWAITING_REVIEW")).toBeVisible();
-  await expect(page.getByText(/Casting of column C4/i)).toBeVisible();
+  // "Casting of column C4" appears twice on the review page (the work-item card AND the
+  // raw transcript text) — .first() avoids a strict-mode multi-match violation.
+  await expect(page.getByText(/Casting of column C4/i).first()).toBeVisible();
   const reportUrl = page.url();
   const reportId = reportUrl.split("/reports/")[1];
 
