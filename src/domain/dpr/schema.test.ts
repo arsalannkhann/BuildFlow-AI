@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
-import { dprSchema, DPR_SCHEMA_VERSION } from "./schema";
+import { dprSchema, DPR_SCHEMA_VERSION, type DprStructuredData } from "./schema";
 
-const valid = {
+const valid: DprStructuredData = {
   schema_version: DPR_SCHEMA_VERSION,
   work_items: [{
     description: "Cast column C4", location: "Tower A / L3", activity: "RCC",
