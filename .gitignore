@@ -1,0 +1,14 @@
+node_modules/
+.next/
+.env
+.env.local
+.env*.local
+dist/
+build/
+coverage/
+test-results/
+playwright-report/
+*.log
+.DS_Store
+.pglite/
+/local-storage/

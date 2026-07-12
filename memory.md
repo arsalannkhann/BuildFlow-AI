@@ -1,0 +1,261 @@
+# BuildFlow AI — Project Memory
+
+**Purpose:** Durable context for founders, contributors, and coding agents.  
+**Last updated:** 2026-07-13  
+**Update rule:** Keep this file concise, factual, dated, and consistent with the source documents.
+
+## 1. Read order
+
+Before making product or technical changes, read:
+
+1. `memory.md` — current context and decisions.
+2. `PRD.md` — users, scope, requirements, metrics, non-goals.
+3. `phases.md` — what is authorized now and the exit gate.
+4. `Architecture.MD` — system boundaries and stack.
+5. `rules.md` — mandatory implementation rules.
+6. `deisgn.md` — UX, visual system, and product language.
+
+If these documents disagree, stop and resolve the inconsistency rather than choosing silently.
+
+## 2. Project in one paragraph
+
+BuildFlow AI is an India-first construction operations product. Its initial wedge converts a site engineer’s voice update and photos into a structured, evidence-linked Daily Progress Report (DPR) that a project manager reviews and approves. The product is Android-first, offline-first, multi-tenant, and designed for English, Hindi, and Hinglish site reporting. The long-term ambition is an AI operating layer for construction, but expansion depends on earning trustworthy daily project data and paid adoption first.
+
+## 3. Current phase
+
+**Current phase:** Phase 0 — field discovery and design partners.  
+**Next phase gate:** Three companies provide real workflow access; at least two demonstrate willingness to pay; the minimum DPR schema and capture prototype are validated with actual users.
+
+Do not begin full product implementation solely because the architecture is documented. The concierge pilot must establish output trust and correction patterns first.
+
+## 4. Current product decision
+
+### Build now
+
+- Voice/audio capture.
+- Photo evidence capture.
+- Offline local draft and reliable sync.
+- Transcription and strict structured DPR extraction.
+- Evidence-linked manager review.
+- Approval, versioned PDF, and controlled sharing.
+- Basic missing-report and blocker visibility.
+
+### Explicitly defer
+
+- Full ERP.
+- Computer-vision progress percentage.
+- Face attendance.
+- Automated procurement, payment, scheduling, or compliance submission.
+- Legally authoritative e-MB.
+- Equipment maintenance.
+- Budget forecasting.
+- General portfolio chatbot.
+- Neo4j/knowledge graph.
+- Autonomous agents.
+
+## 5. Current customer hypothesis
+
+The initial ICP is a Delhi NCR contractor, EPC firm, or developer with 3–20 active projects whose site teams already report through WhatsApp, spreadsheets, Word, or PDFs. The likely buyer is a director or project head; the champion is a project manager; the primary contributor is a site engineer.
+
+This is a hypothesis until Phase 0 evidence confirms which segment has the strongest pain, access, buying authority, and adoption behavior.
+
+## 6. Current value proposition
+
+> BuildFlow turns site voice notes and photos into accurate daily progress reports and management updates in minutes.
+
+Do not lead early sales with “AI Operating System for Construction.” That language describes the long-term ambition and makes the immediate product sound broader than it is.
+
+## 7. Current technical decisions
+
+- Modular monolith plus asynchronous workers.
+- TypeScript for web, mobile, API, and shared contracts.
+- Python only for AI/document workers where it has a material ecosystem advantage.
+- Next.js App Router for web.
+- Expo React Native for the Android-first mobile app.
+- SQLite/SQLCipher for offline drafts and sync commands.
+- NestJS/Fastify for the API.
+- PostgreSQL as the source of truth, including RLS, JSONB, `pgvector`, and PostGIS when needed.
+- Managed Supabase services initially, subject to production region and contract confirmation.
+- Cloud Run, Cloud Tasks, and object storage adapters for runtime and durable processing.
+- OpenAI Responses API with Structured Outputs for the initial AI pipeline.
+- Speech provider selected through a field benchmark across OpenAI, Sarvam, and Bhashini.
+- HTML/CSS plus Playwright for issued PDF generation.
+- No graph database, separate vector database, Kubernetes, Kafka, or agent framework in MVP.
+
+## 8. Non-negotiable product boundaries
+
+- The original audio, photo, and transcript remain available according to retention policy.
+- AI output is a draft until an accountable human approves it.
+- Unknown values remain unknown; AI must not invent convenient facts.
+- Approved and issued report versions are auditable and immutable.
+- Approval and external issuance are separate actions.
+- Tenant/project authorization applies to every record, file, search result, job, export, and link.
+- Offline capture must not lose acknowledged work.
+- Regulatory and compliance output is review-ready assistance, never a guarantee.
+
+## 9. Success definition
+
+The north-star measure is **trusted approved project-days**.
+
+Paid-beta targets:
+
+- 70% or more of expected pilot DPRs submitted on time.
+- Five minutes or less median contributor effort.
+- 90% or more drafts accepted with minor or no correction by pilot end.
+- Zero invented critical values in the release evaluation set.
+- Three customers continue paying.
+- One customer expands to another project.
+
+## 10. Critical unknowns
+
+1. Which customer segment buys fastest and retains best?
+2. Which DPR fields are genuinely common across customers?
+3. Can site users adopt a dedicated app, or is WhatsApp ingestion essential?
+4. Which speech provider performs best on noisy, code-mixed field audio?
+5. What level of correction makes a manager stop trusting the draft?
+6. How much report-template customization is product versus services?
+7. What retention and data-residency terms will paying customers require?
+8. Which expansion workflow creates the highest retention or willingness to pay?
+9. Are Delhi NCR compliance workflows a strong paid wedge after current legal validation?
+
+## 11. Assumptions that must not become “facts”
+
+- That millions of workers imply an accessible software market.
+- That a site photo can yield a reliable completion percentage.
+- That Neo4j is necessary for construction reasoning.
+- That ₹2,999/month supports onboarding, storage, AI, and support costs.
+- That a compliance workflow can be automated based only on public summaries.
+- That an Indic-language model performs well in actual site noise.
+- That users want chat instead of an exception-first workflow.
+- That proprietary data automatically creates a defensible moat.
+
+Each assumption requires a test, owner, and dated result.
+
+## 12. Regulatory caution
+
+The source roadmap discusses RERA, DPCC Dust Portal, GRAP, Measurement Books, Tally, and related processes. These requirements are time-sensitive, jurisdiction-specific, and may be incompletely or inaccurately summarized. Before designing, selling, or automating any such workflow:
+
+1. verify current primary legal/regulatory sources;
+2. consult a qualified domain professional;
+3. version requirements by jurisdiction and effective date;
+4. define accountable human review and submission;
+5. avoid claims of guaranteed compliance.
+
+## 13. AI memory and data policy
+
+- This file stores project decisions, not customer data or personal memory.
+- Never add production transcripts, photos, names, mobile numbers, invoices, secrets, tokens, or signed URLs.
+- Eval examples live in controlled, consented, de-identified fixtures—not here.
+- Model IDs belong in provider configuration and eval reports, not hard-coded throughout domain code.
+- Derived AI artifacts inherit the source record’s access and deletion policy.
+
+## 14. Decision log
+
+### 2026-07-13 — Narrow initial wedge
+
+**Decision:** Start with voice/photo-to-DPR rather than the full module roadmap.  
+**Reason:** High-frequency pain, low behavior change, fast proof of value, and foundation for structured data.  
+**Revisit when:** Three paid pilots reveal a different stronger workflow.
+
+### 2026-07-13 — Modular monolith
+
+**Decision:** One modular API deployable plus asynchronous workers.  
+**Reason:** Faster iteration and simpler transactions; service boundaries are not yet proven.  
+**Revisit when:** A measured scale, deployment, security, or ownership boundary justifies extraction.
+
+### 2026-07-13 — PostgreSQL before graph
+
+**Decision:** PostgreSQL is the transactional and search foundation; no Neo4j in MVP.  
+**Reason:** Initial relationships and retrieval are well supported by relational tables, JSONB, full text, vectors, and recursive queries.  
+**Revisit when:** Repeated production graph queries are demonstrably inadequate in PostgreSQL and a synchronized projection has a clear owner.
+
+### 2026-07-13 — Offline-first Android
+
+**Decision:** Expo/React Native with durable SQLite commands.  
+**Reason:** Site connectivity and device conditions make network-dependent capture unacceptable.  
+**Revisit when:** Field research shows a different primary device or workflow.
+
+### 2026-07-13 — Human approval boundary
+
+**Decision:** AI cannot approve or issue operational records.  
+**Reason:** Trust, accountability, and the potential financial/compliance impact of construction records.  
+**Revisit when:** Only through a separate product, legal, security, and customer-control decision.
+
+### 2026-07-13 — Provider-portable AI
+
+**Decision:** Use capability-based adapters and benchmark speech providers.  
+**Reason:** Indic language, code-mixing, noise, accuracy, latency, and cost cannot be selected reliably from marketing claims.  
+**Revisit when:** Field evaluation establishes a stable default or customer data-location requirements constrain providers.
+
+## 15. Research log
+
+### 2026-07-13 — Source roadmap reviewed
+
+The provided “BuildFlow AI Startup Roadmap” was reviewed. Useful themes retained:
+
+- unstructured-first input;
+- site workflow ownership;
+- daily reporting as a core foundation;
+- India-specific language and operational reality;
+- evidence accumulation for future modules.
+
+Themes deliberately narrowed or deferred:
+
+- ten-module simultaneous scope;
+- early knowledge graph/Neo4j;
+- precise AI vision progress measurement;
+- autonomous agents;
+- automated regulatory submission;
+- low subscription pricing before unit economics.
+
+### 2026-07-13 — Current stack guidance checked
+
+Primary documentation reviewed for Next.js App Router, Expo SQLite/local-first design, Supabase PostgreSQL/RLS/extensions, OpenAI Structured Outputs/models/transcription, and Cloud Run autoscaling. Links are recorded in `Architecture.MD`.
+
+## 16. Working experiment log
+
+Use this structure for material experiments:
+
+```text
+Date:
+Hypothesis:
+Customer/user segment:
+Method:
+Sample:
+Success threshold:
+Result:
+Decision:
+Owner:
+Follow-up date:
+```
+
+Do not record vague feedback such as “users liked it.” Record observed behavior, quantities, correction rates, payment commitments, and counter-evidence.
+
+## 17. How to update this memory
+
+Update `memory.md` when:
+
+- the current phase changes;
+- an assumption is validated or rejected;
+- ICP, wedge, success metric, or scope changes;
+- an architecture decision is accepted or reversed;
+- a new material risk or constraint appears;
+- field research changes product language or workflow.
+
+For each change:
+
+1. add the date;
+2. state evidence, not just conclusion;
+3. update the authoritative source document;
+4. remove stale “current” statements;
+5. retain a concise decision-log entry if the history matters.
+
+## 18. Immediate next actions
+
+1. Recruit three design partners in the defined ICP.
+2. Schedule site shadowing and collect consented DPR/audio/photo examples.
+3. Define and test the common DPR schema.
+4. Prototype the mobile capture and manager review flows.
+5. Run a concierge pilot before building the full processing platform.
+6. Benchmark OpenAI, Sarvam, and Bhashini on real noisy site audio.
+7. Measure current reporting time, correction severity, review latency, and willingness to pay.
