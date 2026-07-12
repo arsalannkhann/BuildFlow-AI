@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { pgTable, text, integer, timestamp, jsonb, boolean, bigint } from "drizzle-orm/pg-core";
 
-const ts = () => timestamp("created_at", { withTimezone: true }).defaultNow().notNull();
+const ts = (name = "created_at") => timestamp(name, { withTimezone: true }).defaultNow().notNull();
 
 export const organizations = pgTable("organization", {
   id: text("id").primaryKey(),
@@ -94,7 +94,7 @@ export const processingRuns = pgTable("processing_run", {
   provider: text("provider"),
   model: text("model"),
   errorCategory: text("error_category"),
-  startedAt: ts(),
+  startedAt: ts("started_at"),
   finishedAt: timestamp("finished_at", { withTimezone: true }),
 });
 
@@ -105,7 +105,7 @@ export const processingStages = pgTable("processing_stage", {
   status: text("status").notNull(),
   attempt: integer("attempt").notNull().default(0),
   errorCategory: text("error_category"),
-  startedAt: ts(),
+  startedAt: ts("started_at"),
   finishedAt: timestamp("finished_at", { withTimezone: true }),
 });
 
@@ -134,7 +134,7 @@ export const issuedDocuments = pgTable("issued_document", {
   issuedBy: text("issued_by").notNull(),
   templateVersion: text("template_version").notNull(),
   supersededBy: text("superseded_by"),
-  issuedAt: ts(),
+  issuedAt: ts("issued_at"),
 });
 
 export const auditEvents = pgTable("audit_event", {

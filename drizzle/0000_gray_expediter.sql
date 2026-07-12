@@ -56,7 +56,7 @@ CREATE TABLE IF NOT EXISTS "issued_document" (
 	"issued_by" text NOT NULL,
 	"template_version" text NOT NULL,
 	"superseded_by" text,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+	"issued_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "membership" (
@@ -83,7 +83,7 @@ CREATE TABLE IF NOT EXISTS "processing_run" (
 	"provider" text,
 	"model" text,
 	"error_category" text,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"started_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"finished_at" timestamp with time zone
 );
 --> statement-breakpoint
@@ -94,7 +94,7 @@ CREATE TABLE IF NOT EXISTS "processing_stage" (
 	"status" text NOT NULL,
 	"attempt" integer DEFAULT 0 NOT NULL,
 	"error_category" text,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"started_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"finished_at" timestamp with time zone
 );
 --> statement-breakpoint
