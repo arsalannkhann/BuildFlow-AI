@@ -10,6 +10,8 @@ import { latestRevision } from "@/db/queries/revisions";
 import { LocalFsStorage } from "@/storage/local-fs";
 import { runProcessing } from "./run";
 import type { TenantContext } from "@/domain/tenancy";
+import { processingStages } from "@/db/schema";
+import { eq } from "drizzle-orm";
 
 const ctx = (): TenantContext => ({ organizationId: SEED.orgId, projectId: SEED.projectId,
   userId: SEED.engineer.id, capabilities: ["report.create", "report.review"] });
@@ -45,6 +47,8 @@ test("runProcessing without audio fails into PROCESSING_FAILED, inputs preserved
   await setReportStatus(db, ctx(), r.id, "PROCESSING");
   await runProcessing(db, ctx(), r.id);
   expect((await getReport(db, ctx(), r.id)).status).toBe("PROCESSING_FAILED");
+  const stages = await db.select().from(processingStages).where(eq(processingStages.status, "failed"));
+  expect(stages.some((s) => s.name === "validateManifest")).toBe(true);
 });
 
 test("a retry from PROCESSING creates exactly one more revision", async () => {
