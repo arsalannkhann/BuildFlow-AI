@@ -36,6 +36,15 @@ architecture in miniature; these are the parts deliberately left for later.
 - **Photo embedding + multi-page pagination in the issued PDF.** The A4 template renders the
   structured sections; selected photo evidence and pagination controls (`deisgn.md` §17) are
   not yet included.
+- **Retry / manual-fallback UI for `PROCESSING_FAILED`.** Inputs are preserved and the state
+  machine allows `PROCESSING_FAILED → PROCESSING` (retry) and `→ AWAITING_REVIEW` (manual
+  draft), but no action/UI wires it yet. The mock provider never fails, so the demo is
+  unaffected; this should be wired before real providers are enabled so the spec DoD ("offers
+  retry / manual fallback") is fully met.
+- **Asynchronous processing.** `runProcessing` currently runs synchronously inside the capture
+  server action (instant with the mock). With `AI_PROVIDER=openai` this blocks the submit
+  request until transcription+extraction+summary complete. Moving it onto the durable queue
+  (see "Durable queue" above) with UI polling of report status is the proper fix.
 
 ## Hardening notes (do before ingesting less-trusted input)
 

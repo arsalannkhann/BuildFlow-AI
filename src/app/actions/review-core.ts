@@ -2,6 +2,7 @@ import type { AppDb } from "@/db/client";
 import type { StoragePort } from "@/storage/port";
 import type { TenantContext } from "@/domain/tenancy";
 import { assertCan } from "@/domain/tenancy";
+import { assertTransition, type ReportStatus } from "@/domain/report/state";
 import { newId } from "@/domain/ids";
 import { getReport, setReportStatus } from "@/db/queries/reports";
 import { latestRevision } from "@/db/queries/revisions";
@@ -28,6 +29,9 @@ export async function requestChanges(db: AppDb, ctx: TenantContext, reportId: st
 export async function issueReport(db: AppDb, storage: StoragePort, ctx: TenantContext, reportId: string): Promise<string> {
   assertCan(ctx, "report.issue");
   const report = await getReport(db, ctx, reportId);
+  // Approve-before-issue: fail closed BEFORE rendering/storing a PDF or writing an
+  // issued_document row. The UI only hides the button; UI hiding is never authorization.
+  assertTransition(report.status as ReportStatus, "ISSUED");
   const rev = await latestRevision(db, ctx, reportId);
   if (!rev) throw new Error("No revision to issue");
 

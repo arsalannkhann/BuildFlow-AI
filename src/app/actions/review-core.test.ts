@@ -5,8 +5,9 @@ import { join } from "node:path";
 import { createTestDb } from "@/db/client";
 import { seed, SEED } from "@/db/seed";
 import { submitReport } from "./capture-core";
-import { approveReport, requestChanges } from "./review-core";
+import { approveReport, requestChanges, issueReport } from "./review-core";
 import { getReport } from "@/db/queries/reports";
+import { latestIssued } from "@/db/queries/issued";
 import { LocalFsStorage } from "@/storage/local-fs";
 import { contextForUser } from "@/app/session";
 
@@ -39,4 +40,14 @@ test("request changes moves to REJECTED with a reason", async () => {
   const mgr = contextForUser(SEED.manager.id);
   await requestChanges(db, mgr, reportId, "Fix cement quantity");
   expect((await getReport(db, mgr, reportId)).status).toBe("REJECTED");
+});
+
+test("issue is refused when the report is not APPROVED — no PDF or issued doc created", async () => {
+  const { db, reportId } = await makeAwaiting(); // report is AWAITING_REVIEW, not APPROVED
+  const mgr = contextForUser(SEED.manager.id);
+  const storage = new LocalFsStorage(process.env.STORAGE_DIR);
+  // Guard fires before any render/store/insert, so no Chromium launch and no orphan doc.
+  await expect(issueReport(db, storage, mgr, reportId)).rejects.toThrow(/illegal transition/i);
+  expect(await latestIssued(db, mgr, reportId)).toBeNull();
+  expect((await getReport(db, mgr, reportId)).status).toBe("AWAITING_REVIEW");
 });

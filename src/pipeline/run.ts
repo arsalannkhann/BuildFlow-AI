@@ -1,11 +1,11 @@
 import type { AppDb } from "@/db/client";
 import type { TenantContext } from "@/domain/tenancy";
-import { DPR_SCHEMA_VERSION } from "@/domain/dpr/schema";
+import { DPR_SCHEMA_VERSION, dprSchema } from "@/domain/dpr/schema";
 import { runDeterministicValidations } from "@/domain/dpr/validate";
 import { getAiRegistry } from "@/ai/registry";
 import { listAttachments } from "@/db/queries/attachments";
 import { addRevision } from "@/db/queries/revisions";
-import { setReportStatus, setCurrentRevision } from "@/db/queries/reports";
+import { getReport, setReportStatus, setCurrentRevision } from "@/db/queries/reports";
 import { startRun, finishRun, recordStage } from "@/db/queries/processing";
 import { audit } from "@/db/queries/audit";
 import { LocalFsStorage } from "@/storage/local-fs";
@@ -33,9 +33,11 @@ export async function runProcessing(db: AppDb, ctx: TenantContext, reportId: str
     const transcript = await ai.transcription.transcribe({ audioBytes });
     await recordStage(db, runId, "transcribe", "succeeded", 0);
 
-    // Stage: extract (schema-validated inside the port impls)
+    // Stage: extract. Central never-invent gate: validate the model output against the
+    // schema regardless of provider, so the invariant does not depend on each port impl
+    // remembering to parse. Malformed output throws -> visible PROCESSING_FAILED.
     failedStage = "extract";
-    const extracted = await ai.extraction.extract({ transcript });
+    const extracted = dprSchema.parse(await ai.extraction.extract({ transcript }));
     await recordStage(db, runId, "extract", "succeeded", 0);
 
     // Stage: deterministic validation
@@ -62,8 +64,14 @@ export async function runProcessing(db: AppDb, ctx: TenantContext, reportId: str
     await audit(db, ctx, { action: "report.processed", subjectRef: reportId, metadata: { runId } });
   } catch (err) {
     const category = (err as { category?: string })?.category ?? "processing_error";
-    // Critical: move to a terminal state first so the report can never be stuck in PROCESSING.
-    await setReportStatus(db, ctx, reportId, "PROCESSING_FAILED"); // inputs preserved
+    // Move to a terminal state only if still mid-processing, so the report can never be
+    // stuck in PROCESSING. A failure in post-success bookkeeping (after the report already
+    // reached AWAITING_REVIEW) must not attempt an illegal AWAITING_REVIEW->PROCESSING_FAILED
+    // transition and surface a spurious error.
+    const current = await getReport(db, ctx, reportId).catch(() => null);
+    if (current?.status === "PROCESSING") {
+      await setReportStatus(db, ctx, reportId, "PROCESSING_FAILED"); // inputs preserved
+    }
     // Best-effort bookkeeping — must not block the terminal transition above.
     try {
       await recordStage(db, runId, failedStage, "failed", 0, category);
