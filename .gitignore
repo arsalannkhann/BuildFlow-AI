@@ -13,3 +13,15 @@ playwright-report/
 .DS_Store
 .pglite/
 /local-storage/
+
+# Local agent and editor skills
+.agents/
+.claude/
+.codex/
+.cursor/
+.gemini/
+.kiro/
+
+# Generated review, advertising, audio, and video artifacts
+/output/
+/tmp/
