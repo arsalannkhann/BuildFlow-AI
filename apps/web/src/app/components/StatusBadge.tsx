@@ -1,4 +1,5 @@
 const STATUS_COPY: Record<string, { label: string; className: string }> = {
+  SYNCING: { label: "Uploading files", className: "status-badge--progress" },
   UPLOADED: { label: "Upload complete", className: "status-badge--info" },
   PROCESSING: { label: "Preparing report", className: "status-badge--progress" },
   PROCESSING_FAILED: { label: "Processing failed", className: "status-badge--danger" },

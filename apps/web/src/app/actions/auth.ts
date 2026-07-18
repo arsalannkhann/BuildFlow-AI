@@ -14,6 +14,7 @@ const quickLoginEnabled = () =>
 const PRESETS: Record<string, { email: string; password: string }> = {
   engineer: { email: SEED.engineer.email, password: DEMO_PASSWORD },
   manager: { email: SEED.manager.email, password: DEMO_PASSWORD },
+  owner: { email: SEED.owner.email, password: DEMO_PASSWORD },
 };
 
 export async function loginAction(formData: FormData): Promise<void> {

@@ -1,0 +1,162 @@
+"use server";
+import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
+import { getDb } from "@buildflow/db/client";
+import { ensureBooted } from "@buildflow/db/boot";
+import { getAuth } from "@buildflow/auth/dev";
+import { currentContext, SESSION_COOKIE } from "@/app/session";
+import {
+  acceptInvitationAndCreateAccount, changeMemberRole, createProjectAsAdmin,
+  importActivitiesCsv, importLocationsCsv, inviteMember, parseRole,
+  revokeMemberInvitation, updateProjectSettings,
+} from "@/core/admin-core";
+import { addActivity, addLocation } from "@buildflow/db/queries/reference";
+import { removeMembership } from "@buildflow/db/queries/members";
+import { assertCan } from "@buildflow/domain/tenancy";
+import { audit } from "@buildflow/db/queries/audit";
+
+const str = (fd: FormData, key: string): string => String(fd.get(key) ?? "").trim();
+const opt = (fd: FormData, key: string): string | null => str(fd, key) || null;
+
+export async function createProjectAction(formData: FormData): Promise<void> {
+  const db = await getDb();
+  const ctx = await currentContext();
+  const projectId = await createProjectAsAdmin(db, ctx, {
+    name: str(formData, "name"),
+    clientName: opt(formData, "clientName"),
+    timezone: str(formData, "timezone") || "Asia/Kolkata",
+    address: opt(formData, "address"),
+  });
+  redirect(`/projects/${projectId}/admin`);
+}
+
+export async function updateProjectAction(formData: FormData): Promise<void> {
+  const db = await getDb();
+  const projectId = str(formData, "projectId");
+  const ctx = await currentContext();
+  const lat = opt(formData, "latitude");
+  const lng = opt(formData, "longitude");
+  await updateProjectSettings(db, { ...ctx, projectId }, projectId, {
+    name: str(formData, "name"),
+    clientName: opt(formData, "clientName"),
+    timezone: str(formData, "timezone") || "Asia/Kolkata",
+    address: opt(formData, "address"),
+    reportCutoff: opt(formData, "reportCutoff"),
+    latitude: lat === null ? null : Number(lat),
+    longitude: lng === null ? null : Number(lng),
+    defaultRecipients: opt(formData, "defaultRecipients")?.split(",").map((s) => s.trim()).filter(Boolean) ?? null,
+  });
+  revalidatePath(`/projects/${projectId}/admin`);
+}
+
+export async function inviteMemberAction(formData: FormData): Promise<void> {
+  const db = await getDb();
+  const projectId = opt(formData, "projectId");
+  const ctx = await currentContext();
+  const invite = await inviteMember(db, projectId ? { ...ctx, projectId } : ctx, {
+    email: opt(formData, "email") ?? undefined,
+    mobile: opt(formData, "mobile") ?? undefined,
+    role: parseRole(str(formData, "role")),
+    projectId,
+  });
+  const back = projectId ? `/projects/${projectId}/admin` : "/organization";
+  redirect(`${back}?invited=${encodeURIComponent(invite.token)}`);
+}
+
+export async function revokeInvitationAction(formData: FormData): Promise<void> {
+  const db = await getDb();
+  const ctx = await currentContext();
+  await revokeMemberInvitation(db, ctx, str(formData, "invitationId"));
+  revalidatePath("/organization");
+  const projectId = opt(formData, "projectId");
+  if (projectId) revalidatePath(`/projects/${projectId}/admin`);
+}
+
+export async function changeRoleAction(formData: FormData): Promise<void> {
+  const db = await getDb();
+  const projectId = opt(formData, "projectId");
+  const ctx = await currentContext();
+  await changeMemberRole(db, projectId ? { ...ctx, projectId } : ctx, {
+    userId: str(formData, "userId"),
+    projectId,
+    role: parseRole(str(formData, "role")),
+  });
+  if (projectId) revalidatePath(`/projects/${projectId}/admin`);
+  revalidatePath("/organization");
+}
+
+export async function removeMemberAction(formData: FormData): Promise<void> {
+  const db = await getDb();
+  const projectId = opt(formData, "projectId");
+  const ctx = await currentContext();
+  assertCan(ctx, projectId ? "project.members.manage" : "org.members.manage");
+  const membershipId = str(formData, "membershipId");
+  await removeMembership(db, ctx, membershipId);
+  await audit(db, ctx, { action: "member.removed", subjectRef: membershipId, metadata: { projectId } });
+  if (projectId) revalidatePath(`/projects/${projectId}/admin`);
+  revalidatePath("/organization");
+}
+
+export async function addLocationAction(formData: FormData): Promise<void> {
+  const db = await getDb();
+  const projectId = str(formData, "projectId");
+  const ctx = await currentContext();
+  assertCan(ctx, "project.manage");
+  await addLocation(db, { ...ctx, projectId }, {
+    projectId, name: str(formData, "name"), kind: str(formData, "kind"),
+    parentId: opt(formData, "parentId"),
+  });
+  revalidatePath(`/projects/${projectId}/admin`);
+}
+
+export async function addActivityAction(formData: FormData): Promise<void> {
+  const db = await getDb();
+  const projectId = str(formData, "projectId");
+  const ctx = await currentContext();
+  assertCan(ctx, "project.manage");
+  await addActivity(db, { ...ctx, projectId }, {
+    projectId, name: str(formData, "name"), unit: opt(formData, "unit"),
+    locationId: opt(formData, "locationId"),
+  });
+  revalidatePath(`/projects/${projectId}/admin`);
+}
+
+export async function importCsvAction(formData: FormData): Promise<void> {
+  const db = await getDb();
+  const projectId = str(formData, "projectId");
+  const kind = str(formData, "kind"); // locations | activities
+  const file = formData.get("file") as File | null;
+  if (!file || file.size === 0) throw new Error("Choose a CSV file");
+  if (file.size > 1024 * 1024) throw new Error("CSV too large (max 1 MB)");
+  const text = await file.text();
+  const ctx = await currentContext();
+  const scoped = { ...ctx, projectId };
+  if (kind === "locations") await importLocationsCsv(db, scoped, projectId, text);
+  else if (kind === "activities") await importActivitiesCsv(db, scoped, projectId, text);
+  else throw new Error(`Unknown import kind: ${kind}`);
+  revalidatePath(`/projects/${projectId}/admin`);
+}
+
+export async function acceptInviteAction(formData: FormData): Promise<void> {
+  await ensureBooted();
+  const db = await getDb();
+  const token = str(formData, "token");
+  const password = String(formData.get("password") ?? "");
+  const accepted = await acceptInvitationAndCreateAccount(db, {
+    token,
+    displayName: str(formData, "displayName"),
+    password,
+    email: opt(formData, "email") ?? undefined,
+  });
+  if (!accepted) redirect("/invite/invalid");
+  const signedIn = await getAuth().signInWithPassword(db, accepted.email, password);
+  if (signedIn) {
+    const { cookies } = await import("next/headers");
+    (await cookies()).set(SESSION_COOKIE, signedIn.token, {
+      httpOnly: true, sameSite: "lax", path: "/",
+      secure: process.env.NODE_ENV === "production",
+      expires: signedIn.expiresAt,
+    });
+  }
+  redirect("/reports");
+}

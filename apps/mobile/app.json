@@ -1,0 +1,45 @@
+{
+  "expo": {
+    "name": "BuildFlow",
+    "slug": "buildflow-mobile",
+    "version": "0.1.0",
+    "scheme": "buildflow",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "platforms": ["android", "ios"],
+    "backgroundColor": "#F9FAFB",
+    "android": {
+      "package": "com.buildflow.mobile",
+      "adaptiveIcon": {
+        "backgroundColor": "#102A43"
+      },
+      "edgeToEdgeEnabled": true
+    },
+    "plugins": [
+      "expo-router",
+      "expo-sqlite",
+      "expo-secure-store",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "BuildFlow records your spoken site update. Audio stays on this device until it uploads."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "BuildFlow attaches site photos you choose to your daily report.",
+          "cameraPermission": "BuildFlow uses the camera to capture site photos for your daily report."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "BuildFlow uses the camera to capture site photos for your daily report."
+        }
+      ]
+    ],
+    "experiments": {}
+  }
+}

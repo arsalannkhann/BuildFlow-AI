@@ -41,7 +41,7 @@ export default async function LoginPage({ searchParams }: { searchParams?: Promi
           <p className="eyebrow">Choose your view</p>
           <h2>How are you working today?</h2>
           <p className="login-intro">
-            This demo uses two seeded roles. You can switch roles at any time.
+            This demo uses three seeded roles. You can switch roles at any time.
           </p>
 
           <form action={loginAction} className="role-grid">
@@ -67,6 +67,19 @@ export default async function LoginPage({ searchParams }: { searchParams?: Promi
               <span className="role-card__copy">
                 <strong>Continue as Project Manager</strong>
                 <span>Review evidence, approve the DPR and issue a finished PDF.</span>
+              </span>
+              <span className="role-card__arrow" aria-hidden="true">→</span>
+            </button>
+            <button name="preset" value="owner" className="role-card">
+              <span className="role-card__number">03</span>
+              <span className="role-card__icon role-card__icon--manager" aria-hidden="true">
+                <span />
+                <span />
+                <span />
+              </span>
+              <span className="role-card__copy">
+                <strong>Continue as Organization Owner</strong>
+                <span>Create projects, invite the team and manage organization settings.</span>
               </span>
               <span className="role-card__arrow" aria-hidden="true">→</span>
             </button>

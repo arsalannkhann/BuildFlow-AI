@@ -9,6 +9,11 @@ export const DEMO_PASSWORD = "buildflow-demo";
 
 export const SEED = {
   orgId: "seed-org", projectId: "seed-project",
+  owner: {
+    id: "seed-owner", displayName: "Organization Owner",
+    email: "owner@demo.buildflow.local", role: "org_owner" as const,
+    capabilities: capabilitiesForRole("org_owner"),
+  },
   engineer: {
     id: "seed-engineer", displayName: "Site Engineer",
     email: "engineer@demo.buildflow.local", role: "site_engineer" as const,
@@ -34,15 +39,17 @@ export async function seed(db: AppDb): Promise<void> {
   const { hashPassword } = await import("@buildflow/domain/security/password");
   const passwordHash = hashPassword(DEMO_PASSWORD);
 
-  for (const u of [SEED.engineer, SEED.manager]) {
+  for (const u of [SEED.owner, SEED.engineer, SEED.manager]) {
     await db.insert(users).values({
       id: u.id, organizationId: SEED.orgId, displayName: u.displayName,
       roleHint: u.role, email: u.email,
     }).onConflictDoNothing();
     // Older seeds predate email/role columns; keep existing rows current.
     await db.update(users).set({ email: u.email, roleHint: u.role }).where(eq(users.id, u.id));
+    // The owner's membership is org-wide (projectId null); others are project-scoped.
+    const projectId = u.role === "org_owner" ? null : SEED.projectId;
     await db.insert(memberships).values({
-      id: `m-${u.id}`, organizationId: SEED.orgId, projectId: SEED.projectId,
+      id: `m-${u.id}`, organizationId: SEED.orgId, projectId,
       userId: u.id, role: u.role, capabilities: u.capabilities,
     }).onConflictDoNothing();
     await db.update(memberships)

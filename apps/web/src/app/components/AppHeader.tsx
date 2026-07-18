@@ -34,6 +34,8 @@ export function AppHeader({
 
         <nav className="app-header__nav" aria-label="Primary navigation">
           <Link href="/reports">Reports</Link>
+          <Link href="/projects">Projects</Link>
+          <Link href="/organization">Organization</Link>
           {canCapture && (
             <Link href="/capture" className="header-capture-link" aria-label="Start a new update">
               New update
@@ -41,7 +43,7 @@ export function AppHeader({
           )}
           <Link href="/login" className="user-pill" aria-label={`Switch user. Current role: ${roleLabel}`}>
             <span className="user-avatar" aria-hidden="true">
-              {roleLabel === "Project Manager" ? "PM" : "SE"}
+              {roleLabel.split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase()}
             </span>
             <span className="user-pill__copy">
               <small>Signed in as</small>

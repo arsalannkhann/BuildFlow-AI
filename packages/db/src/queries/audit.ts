@@ -12,3 +12,15 @@ export async function audit(db: AppDb, ctx: TenantContext, input: {
     metadata: input.metadata ?? null,
   });
 }
+
+export type AuditEventRow = typeof auditEvents.$inferSelect;
+
+export async function listAuditEvents(
+  db: AppDb, ctx: TenantContext, limit = 50,
+): Promise<AuditEventRow[]> {
+  const { desc, eq } = await import("drizzle-orm");
+  return db.select().from(auditEvents)
+    .where(eq(auditEvents.organizationId, ctx.organizationId))
+    .orderBy(desc(auditEvents.createdAt))
+    .limit(limit);
+}
