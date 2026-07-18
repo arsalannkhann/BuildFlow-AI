@@ -1,0 +1,15 @@
+{
+  "name": "@buildflow/pdf",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": { "./*": "./src/*.ts" },
+  "scripts": { "typecheck": "tsc -p tsconfig.json" },
+  "dependencies": {
+    "@buildflow/domain": "workspace:*",
+    "playwright": "^1.61.1"
+  },
+  "devDependencies": {
+    "@buildflow/ai": "workspace:*"
+  }
+}

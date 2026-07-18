@@ -1,0 +1,21 @@
+{
+  "name": "@buildflow/pipeline",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@buildflow/ai": "workspace:*",
+    "@buildflow/db": "workspace:*",
+    "@buildflow/domain": "workspace:*",
+    "@buildflow/storage": "workspace:*"
+  },
+  "devDependencies": {
+    "drizzle-orm": "^0.36.0"
+  }
+}
