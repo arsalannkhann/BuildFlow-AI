@@ -155,6 +155,25 @@ The source roadmap discusses RERA, DPCC Dust Portal, GRAP, Measurement Books, Ta
 
 ## 14. Decision log
 
+### 2026-07-19 — Phase B (web + API) landed: trusted project record
+
+**What:** `/v1` mobile sync API (idempotent manifest → checksum-verified uploads →
+idempotent finalize; SYNCING report state; bearer sessions; RFC 9457 errors);
+org/project administration (projects CRUD, settings, location hierarchy, activities,
+CSV importers, member roles, hashed-token invitations with public accept + auto sign-in);
+per-field review decisions (confirm/edit/remove/mark-unknown → new revisions + append-only
+review trail, locked after approval); PROCESSING_FAILED retry + manual-draft fallback;
+secure client links (hashed tokens, 30-day expiry, revocation, access audit, public
+`/r/[token]` page + PDF stream); FTS search over approved reports only (GIN index,
+tenant filter before ranking); photo evidence pages in issued PDFs (template v2).
+**Conventions established (agents follow these):** queries in
+`packages/db/src/queries/*` take `(db, ctx)` and filter by org; services in
+`apps/web/src/core/*-core.ts` assertCan + audit; thin `"use server"` actions; migrations
+via drizzle-kit + hand-appended FORCE-RLS policies; tests colocated, PGlite-backed.
+**Deferred within B:** OpenAPI generation from contracts (Phase F), Hindi/Hinglish eval
+fixtures (Phase F), invite delivery by email/WhatsApp (Phase E — link shown once to the
+inviter for now), signed direct uploads (storage adapter swap).
+
 ### 2026-07-19 — Phase A landed: monorepo, auth, RLS, durable jobs, dual-driver Postgres
 
 **What:** pnpm/Turborepo monorepo (`apps/web`, `apps/worker`, 8 packages); dev credential
