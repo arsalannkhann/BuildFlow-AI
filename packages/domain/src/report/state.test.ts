@@ -23,5 +23,5 @@ test("illegal transitions are rejected", () => {
 
 test("all statuses are enumerated", () => {
   expect(REPORT_STATUSES).toContain("ISSUED");
-  expect(REPORT_STATUSES.length).toBe(8);
+  expect(REPORT_STATUSES.length).toBe(9); // + SYNCING (mobile manifest in flight)
 });
