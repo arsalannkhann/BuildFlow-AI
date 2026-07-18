@@ -7,6 +7,7 @@ import { buildFieldRows } from "../view-model";
 import { ReviewClient } from "./ReviewClient";
 import type { DprStructuredData } from "@buildflow/domain/dpr/schema";
 import { AppHeader } from "@/app/components/AppHeader";
+import { AutoRefresh } from "@/app/components/AutoRefresh";
 
 export default async function ReportPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -20,8 +21,10 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
   const photoIds = atts.filter((a) => a.kind === "photo").map((a) => a.id);
   const canApprove = ctx.capabilities.includes("report.approve");
 
+  const processing = report.status === "UPLOADED" || report.status === "PROCESSING";
   return (
     <>
+      {processing ? <AutoRefresh /> : null}
       <AppHeader
         roleLabel={canApprove ? "Project Manager" : "Site Engineer"}
         canCapture={ctx.capabilities.includes("report.create")}

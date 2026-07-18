@@ -155,6 +155,23 @@ The source roadmap discusses RERA, DPCC Dust Portal, GRAP, Measurement Books, Ta
 
 ## 14. Decision log
 
+### 2026-07-19 — Phase A landed: monorepo, auth, RLS, durable jobs, dual-driver Postgres
+
+**What:** pnpm/Turborepo monorepo (`apps/web`, `apps/worker`, 8 packages); dev credential
+auth (scrypt + hashed server-side sessions) behind `AuthPort`; RLS policies with
+`buildflow_app` role + `withTenant` GUC helper, verified by hermetic tests; transactional
+outbox + DB-backed job queue (lease/backoff/dead-letter) with the DPR pipeline as first
+handler (`JOBS_MODE=inline` default, `worker` with real PG); dual-driver db client
+(`DATABASE_URL` → node-postgres, else PGlite); CI + docker-compose + real-PG verification
+script; PDF HTML escaping; strict `AI_PROVIDER`/`AUTH_PROVIDER` validation.
+**Assumptions:** PGlite dev stays single-process (inline jobs); RLS wiring of every request
+path through `withTenant` completes in Phase B with the application-service layer; Supabase
+is the future managed path — a dev project exists (ref `ktbeunbbchszkskuesow`, Tokyo;
+production must move to an India region), its URL/keys live only in `.env.local`, and
+`SUPABASE_DATABASE_URL` is parked there until the switch (rename to `DATABASE_URL`).
+**Deferred:** Supabase Auth adapter (Phase B/F), storage signed-URL adapter (Phase B),
+Cloud Tasks dispatcher (Phase F), stuck-PROCESSING sweeper for dead jobs (Phase E dashboard).
+
 ### 2026-07-19 — Build the complete MVP on the audited slice
 
 **Decision:** Expand the verified DPR vertical slice into the full MVP (13 scope areas,

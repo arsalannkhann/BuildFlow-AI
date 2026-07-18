@@ -9,5 +9,9 @@ export type AiRegistry = { transcription: TranscriptionPort; extraction: Extract
 export function getAiRegistry(): AiRegistry {
   const provider = process.env.AI_PROVIDER ?? "mock";
   if (provider === "openai") return openAiRegistry();
-  return { transcription: new MockTranscription(), extraction: new MockExtraction(), summary: new MockSummary() };
+  if (provider === "mock") {
+    return { transcription: new MockTranscription(), extraction: new MockExtraction(), summary: new MockSummary() };
+  }
+  // A typo must never silently downgrade production to the mock (rules.md §15).
+  throw new Error(`Unknown AI_PROVIDER: ${provider} (expected "mock" or "openai")`);
 }

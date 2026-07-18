@@ -1,12 +1,22 @@
 import type { DprStructuredData } from "@buildflow/domain/dpr/schema";
 
+// All interpolated values pass through esc(): transcript-derived text is untrusted input
+// to this HTML pipeline (rules.md §13 "sanitize rendered HTML").
+const esc = (value: string): string =>
+  value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+
 export function dprHtml(input: {
   documentId: string; version: number; reportDate: string;
   data: DprStructuredData; summaryClientSafe: string; issuedBy: string;
 }): string {
   const { data } = input;
   const rows = (label: string, items: string[]) =>
-    items.length ? `<h2>${label}</h2><ul>${items.map((i) => `<li>${i}</li>`).join("")}</ul>` : "";
+    items.length ? `<h2>${esc(label)}</h2><ul>${items.map((i) => `<li>${esc(i)}</li>`).join("")}</ul>` : "";
   return `<!doctype html><html><head><meta charset="utf-8"><style>
     @page { size: A4; margin: 20mm; }
     body { font-family: Inter, sans-serif; color: #111827; }
@@ -15,8 +25,8 @@ export function dprHtml(input: {
     ul { padding-left: 18px; }
   </style></head><body>
     <h1>Daily Progress Report</h1>
-    <p class="meta">Date: ${input.reportDate} · Document ${input.documentId} · v${input.version} · Issued by ${input.issuedBy}</p>
-    <p>${input.summaryClientSafe}</p>
+    <p class="meta">Date: ${esc(input.reportDate)} · Document ${esc(input.documentId)} · v${input.version} · Issued by ${esc(input.issuedBy)}</p>
+    <p>${esc(input.summaryClientSafe)}</p>
     ${rows("Work completed", data.work_items.map((w) => `${w.description}${w.quantity.value ? ` — ${w.quantity.value} ${w.quantity.unit ?? ""}` : ""}`))}
     ${rows("Labour", data.labour.map((l) => `${l.trade}: ${l.count ?? "—"}`))}
     ${rows("Materials", data.materials.map((m) => `${m.name} (${m.status ?? "—"})`))}

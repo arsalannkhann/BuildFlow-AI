@@ -1,0 +1,23 @@
+# Local real-PostgreSQL stack (ADR-0002 production path).
+#   docker compose up -d db
+#   DATABASE_URL=postgresql://buildflow:buildflow@localhost:5432/buildflow pnpm dev
+# pgvector/pgvector ships PostgreSQL + the pgvector extension used by search (Phase E).
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: buildflow
+      POSTGRES_PASSWORD: buildflow
+      POSTGRES_DB: buildflow
+    ports:
+      - "5432:5432"
+    volumes:
+      - buildflow-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U buildflow"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  buildflow-pgdata:

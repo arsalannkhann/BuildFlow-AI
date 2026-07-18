@@ -4,19 +4,20 @@ Tracked here so later phases (see `phases.md`) pick these up. Each is intentiona
 the slice, not forgotten. The slice's job was one runnable end-to-end path on the real
 architecture in miniature; these are the parts deliberately left for later.
 
-## Deferred by design (from the spec, §2 / §8)
+## Status update (2026-07-19, Phase A)
 
-- **Postgres RLS + exhaustive cross-tenant suite** (Phase 2). The slice enforces tenant
-  isolation at the application/query layer (every query requires a `TenantContext` and
-  filters by `organization_id`) and ships one representative cross-tenant negative test
-  (`src/security/cross-tenant.test.ts`). Full Row-Level Security policies and a per-resource
-  negative suite are not yet in place — this is a known, documented gap, not defense-in-depth.
-- **Expo mobile app + offline SQLite sync queue** (Phase 2/3). Capture is web-only here; the
-  offline-first Android app (the primary field surface) is its own workstream.
-- **Durable queue (Cloud Tasks) + transactional outbox** (Phase 2). The pipeline runs
-  in-process; stages are written idempotently so they lift-and-shift onto a real worker.
-- **Supabase Auth / real identity** (Phase 2). Dev "login" just picks a seeded user; there is
-  no password, session table, or provider.
+Landed since this list was written: RLS policies + hermetic enforcement tests
+(`packages/db/drizzle/0002_rls_defense_in_depth.sql`, `packages/db/src/security/rls.test.ts`);
+transactional outbox + DB-backed durable queue with worker (`packages/jobs`, `apps/worker`);
+credentialed sessions behind `AuthPort` (`packages/auth`); asynchronous-capable processing
+(`JOBS_MODE`); PDF HTML escaping; strict `AI_PROVIDER` validation; DB-enforced revision/issue
+uniqueness. Still open from the original list, now tracked for Phases B–F:
+
+- **Per-resource cross-tenant negative suite** and wiring every request path through
+  `withTenant` RLS GUC (Phase B, with the application-service layer).
+- **Expo mobile app + offline SQLite sync queue** (Phase B).
+- **Cloud Tasks dispatcher** on top of the outbox (Phase F).
+- **Supabase Auth adapter** behind `AuthPort` (Phase B/F).
 - **Dashboards, portfolio exceptions, search / `pgvector`** (Phase 3+).
 - **WhatsApp / email delivery, secure revocable public links** (Phase 3/4).
 - **Hindi / Hinglish support + field eval set + speech-provider benchmark**
@@ -38,28 +39,22 @@ architecture in miniature; these are the parts deliberately left for later.
   not yet included.
 - **Retry / manual-fallback UI for `PROCESSING_FAILED`.** Inputs are preserved and the state
   machine allows `PROCESSING_FAILED → PROCESSING` (retry) and `→ AWAITING_REVIEW` (manual
-  draft), but no action/UI wires it yet. The mock provider never fails, so the demo is
-  unaffected; this should be wired before real providers are enabled so the spec DoD ("offers
-  retry / manual fallback") is fully met.
-- **Asynchronous processing.** `runProcessing` currently runs synchronously inside the capture
-  server action (instant with the mock). With `AI_PROVIDER=openai` this blocks the submit
-  request until transcription+extraction+summary complete. Moving it onto the durable queue
-  (see "Durable queue" above) with UI polling of report status is the proper fix.
+  draft), but no action/UI wires it yet. Wire before real providers are the default (Phase B).
+- ~~Asynchronous processing~~ — done in Phase A: capture enqueues a `report.process` job in
+  the same transaction; `JOBS_MODE=worker` runs it on `apps/worker`, inline mode preserves
+  the single-process PGlite dev flow; the report page auto-refreshes while processing.
+- **Stuck-PROCESSING sweeper.** A job that dead-letters leaves its report in `PROCESSING`;
+  the provider-health dashboard (Phase E) must surface dead jobs and offer retry.
 
 ## Hardening notes (do before ingesting less-trusted input)
 
-- **HTML-escape interpolated values in the PDF template** (`src/pdf/template.ts`). The
-  template interpolates DPR field text and summaries directly into an HTML string that is fed
-  to a throwaway headless Chromium page. Data comes from the internal approved record today,
-  so this isn't user-facing XSS, but per `rules.md` §13 ("sanitize rendered HTML") the
-  interpolated strings should be escaped before this pipeline ingests transcripts from
-  less-trusted sources.
-- **Concurrency-safe revision numbering.** `addRevision` computes `revisionNumber` as
-  count+1 (read-then-insert), which is safe for the single-writer slice but should become a
-  DB sequence / unique constraint before concurrent writers (e.g. simultaneous AI processing
-  and manual edits) exist.
-- **`AI_PROVIDER` typo handling.** An unrecognized `AI_PROVIDER` value silently falls back to
-  the mock provider; consider failing loudly on an unknown value once more providers exist.
+- ~~HTML-escape interpolated values in the PDF template~~ — done in Phase A (`esc()` in
+  `packages/pdf/src/template.ts`).
+- **Concurrency-safe revision numbering.** A unique index on
+  `(report_id, revision_number)` now makes collisions fail loudly (migration 0002); the
+  read-then-insert in `addRevision` still needs retry-on-conflict once concurrent writers
+  exist (Phase B review edits).
+- ~~`AI_PROVIDER` typo handling~~ — done in Phase A: unknown values throw.
 
 ## Environment note (not a product gap)
 

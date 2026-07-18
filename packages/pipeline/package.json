@@ -13,6 +13,7 @@
     "@buildflow/ai": "workspace:*",
     "@buildflow/db": "workspace:*",
     "@buildflow/domain": "workspace:*",
+    "@buildflow/jobs": "workspace:*",
     "@buildflow/storage": "workspace:*"
   },
   "devDependencies": {

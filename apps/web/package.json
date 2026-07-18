@@ -12,8 +12,10 @@
   },
   "dependencies": {
     "@buildflow/ai": "workspace:*",
+    "@buildflow/auth": "workspace:*",
     "@buildflow/db": "workspace:*",
     "@buildflow/domain": "workspace:*",
+    "@buildflow/jobs": "workspace:*",
     "@buildflow/pdf": "workspace:*",
     "@buildflow/pipeline": "workspace:*",
     "@buildflow/storage": "workspace:*",

@@ -3,8 +3,10 @@ const nextConfig = {
   serverExternalPackages: ["@electric-sql/pglite", "playwright"],
   transpilePackages: [
     "@buildflow/ai",
+    "@buildflow/auth",
     "@buildflow/db",
     "@buildflow/domain",
+    "@buildflow/jobs",
     "@buildflow/pdf",
     "@buildflow/pipeline",
     "@buildflow/storage",

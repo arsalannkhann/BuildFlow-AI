@@ -1,26 +1,20 @@
-import { SEED } from "@buildflow/db/seed";
-import type { Capability, TenantContext } from "@buildflow/domain/tenancy";
+import { redirect } from "next/navigation";
+import { getDb } from "@buildflow/db/client";
+import { ensureBooted } from "@buildflow/db/boot";
+import { getAuth } from "@buildflow/auth/dev";
+import { resolveTenantContext } from "@buildflow/auth/context";
+import type { TenantContext } from "@buildflow/domain/tenancy";
 
-const USERS: Record<string, { capabilities: Capability[] }> = {
-  [SEED.engineer.id]: { capabilities: SEED.engineer.capabilities },
-  [SEED.manager.id]: { capabilities: SEED.manager.capabilities },
-};
+export const SESSION_COOKIE = "bf_session";
 
-export function contextForUser(userId: string): TenantContext {
-  const u = USERS[userId];
-  if (!u) throw new Error(`Unknown user: ${userId}`);
-  return { organizationId: SEED.orgId, projectId: SEED.projectId, userId, capabilities: u.capabilities };
-}
-
+/** Resolves the signed-in user's TenantContext or redirects to /login. */
 export async function currentContext(): Promise<TenantContext> {
+  await ensureBooted();
   const { cookies } = await import("next/headers");
-  const jar = await cookies();
-  const userId = jar.get("bf_user")?.value ?? SEED.engineer.id;
-  return contextForUser(userId);
-}
-
-export async function loginAs(userId: string): Promise<void> {
-  const { cookies } = await import("next/headers");
-  const jar = await cookies();
-  jar.set("bf_user", userId, { httpOnly: true, sameSite: "lax", path: "/" });
+  const token = (await cookies()).get(SESSION_COOKIE)?.value;
+  if (!token) redirect("/login");
+  const db = await getDb();
+  const sessionUser = await getAuth().verifySession(db, token);
+  if (!sessionUser) redirect("/login");
+  return resolveTenantContext(db, sessionUser.userId);
 }

@@ -1,11 +1,12 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, integer, timestamp, jsonb, boolean, bigint } from "drizzle-orm/pg-core";
+import { pgTable, text, integer, timestamp, jsonb, boolean, bigint, doublePrecision } from "drizzle-orm/pg-core";
 
 const ts = (name = "created_at") => timestamp(name, { withTimezone: true }).defaultNow().notNull();
 
 export const organizations = pgTable("organization", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
+  settings: jsonb("settings").$type<Record<string, unknown>>(),
   createdAt: ts(),
 });
 
@@ -14,6 +15,24 @@ export const users = pgTable("user", {
   organizationId: text("organization_id").notNull(),
   displayName: text("display_name").notNull(),
   roleHint: text("role_hint").notNull(),
+  email: text("email").unique(),
+  isActive: boolean("is_active").notNull().default(true),
+});
+
+// Dev-credential auth (AuthPort "dev" adapter). Supabase Auth replaces this table's role
+// in production; user rows remain the identity anchor either way.
+export const authCredentials = pgTable("auth_credential", {
+  userId: text("user_id").primaryKey(),
+  passwordHash: text("password_hash").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+// Server-side sessions: the cookie holds an opaque token; we store only its SHA-256 hash.
+export const sessions = pgTable("session", {
+  id: text("id").primaryKey(), // sha256(token)
+  userId: text("user_id").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdAt: ts(),
 });
 
 export const projects = pgTable("project", {
@@ -24,6 +43,10 @@ export const projects = pgTable("project", {
   timezone: text("timezone").notNull().default("Asia/Kolkata"),
   address: text("address"),
   reportCutoff: text("report_cutoff"),
+  latitude: doublePrecision("latitude"),
+  longitude: doublePrecision("longitude"),
+  reportTemplate: text("report_template"),
+  defaultRecipients: jsonb("default_recipients").$type<string[]>(),
 });
 
 export const memberships = pgTable("membership", {
@@ -31,7 +54,27 @@ export const memberships = pgTable("membership", {
   organizationId: text("organization_id").notNull(),
   projectId: text("project_id"),
   userId: text("user_id").notNull(),
+  role: text("role"),
   capabilities: jsonb("capabilities").$type<string[]>().notNull(),
+});
+
+// Transactional outbox + durable job queue in one table (ADR-0003): enqueue in the same
+// transaction as the domain change; the worker leases with FOR UPDATE SKIP LOCKED. The
+// Cloud Tasks adapter later dispatches from this same table.
+export const jobs = pgTable("job", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull(),
+  kind: text("kind").notNull(),
+  payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
+  idempotencyKey: text("idempotency_key").notNull().unique(),
+  status: text("status").notNull().default("queued"), // queued | leased | succeeded | failed | dead
+  attempts: integer("attempts").notNull().default(0),
+  maxAttempts: integer("max_attempts").notNull().default(5),
+  runAfter: timestamp("run_after", { withTimezone: true }).defaultNow().notNull(),
+  leasedUntil: timestamp("leased_until", { withTimezone: true }),
+  lastError: text("last_error"),
+  createdAt: ts(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
 export const dailyReports = pgTable("daily_report", {
@@ -149,7 +192,8 @@ export const auditEvents = pgTable("audit_event", {
 });
 
 export const schema = {
-  organizations, users, projects, memberships, dailyReports, reportRevisions,
+  organizations, users, authCredentials, sessions, projects, memberships, jobs,
+  dailyReports, reportRevisions,
   attachments, evidenceLinks, processingRuns, processingStages, reviewDecisions,
   issuedDocuments, auditEvents,
 };

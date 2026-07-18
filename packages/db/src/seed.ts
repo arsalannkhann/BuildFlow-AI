@@ -1,28 +1,53 @@
 import { eq } from "drizzle-orm";
+import { capabilitiesForRole } from "@buildflow/domain/tenancy";
 import type { AppDb } from "./client";
-import { organizations, projects, users, memberships } from "./schema";
-import type { Capability } from "@buildflow/domain/tenancy";
+import { organizations, projects, users, memberships, authCredentials } from "./schema";
+
+// Demo credentials for the seeded local org. Real deployments create organizations through
+// onboarding; the demo password is public by design and only ever guards local demo data.
+export const DEMO_PASSWORD = "buildflow-demo";
 
 export const SEED = {
   orgId: "seed-org", projectId: "seed-project",
-  engineer: { id: "seed-engineer", displayName: "Site Engineer",
-    capabilities: ["report.create", "report.review"] as Capability[] },
-  manager: { id: "seed-manager", displayName: "Project Manager",
-    capabilities: ["report.review", "report.approve", "report.issue"] as Capability[] },
+  engineer: {
+    id: "seed-engineer", displayName: "Site Engineer",
+    email: "engineer@demo.buildflow.local", role: "site_engineer" as const,
+    capabilities: capabilitiesForRole("site_engineer"),
+  },
+  manager: {
+    id: "seed-manager", displayName: "Project Manager",
+    email: "manager@demo.buildflow.local", role: "project_manager" as const,
+    capabilities: capabilitiesForRole("project_manager"),
+  },
 };
 
 export async function seed(db: AppDb): Promise<void> {
-  const existing = await db.select().from(organizations).where(eq(organizations.id, SEED.orgId));
-  if (existing.length > 0) return;
+  await db.insert(organizations)
+    .values({ id: SEED.orgId, name: "Demo Contractor Pvt Ltd" })
+    .onConflictDoNothing();
+  await db.insert(projects).values({
+    id: SEED.projectId, organizationId: SEED.orgId,
+    name: "Sector 62 Tower A", clientName: "NCR Developers", timezone: "Asia/Kolkata",
+  }).onConflictDoNothing();
 
-  await db.insert(organizations).values({ id: SEED.orgId, name: "Demo Contractor Pvt Ltd" });
-  await db.insert(projects).values({ id: SEED.projectId, organizationId: SEED.orgId,
-    name: "Sector 62 Tower A", clientName: "NCR Developers", timezone: "Asia/Kolkata" });
+  // Hash lazily so importing SEED never pays scrypt cost.
+  const { hashPassword } = await import("@buildflow/domain/security/password");
+  const passwordHash = hashPassword(DEMO_PASSWORD);
 
   for (const u of [SEED.engineer, SEED.manager]) {
-    await db.insert(users).values({ id: u.id, organizationId: SEED.orgId,
-      displayName: u.displayName, roleHint: u.id === SEED.engineer.id ? "site_engineer" : "project_manager" });
-    await db.insert(memberships).values({ id: `m-${u.id}`, organizationId: SEED.orgId,
-      projectId: SEED.projectId, userId: u.id, capabilities: u.capabilities });
+    await db.insert(users).values({
+      id: u.id, organizationId: SEED.orgId, displayName: u.displayName,
+      roleHint: u.role, email: u.email,
+    }).onConflictDoNothing();
+    // Older seeds predate email/role columns; keep existing rows current.
+    await db.update(users).set({ email: u.email, roleHint: u.role }).where(eq(users.id, u.id));
+    await db.insert(memberships).values({
+      id: `m-${u.id}`, organizationId: SEED.orgId, projectId: SEED.projectId,
+      userId: u.id, role: u.role, capabilities: u.capabilities,
+    }).onConflictDoNothing();
+    await db.update(memberships)
+      .set({ role: u.role, capabilities: u.capabilities })
+      .where(eq(memberships.id, `m-${u.id}`));
+    await db.insert(authCredentials).values({ userId: u.id, passwordHash }).onConflictDoNothing();
   }
 }

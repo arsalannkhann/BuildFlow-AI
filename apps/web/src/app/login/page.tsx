@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { loginAction } from "@/app/actions/auth";
-import { SEED } from "@buildflow/db/seed";
 
-export default function LoginPage() {
+export default async function LoginPage({ searchParams }: { searchParams?: Promise<Record<string, string | string[] | undefined>> }) {
+  const params = (await searchParams) ?? {};
+  const error = typeof params.error === "string" ? params.error : undefined;
   return (
     <main id="main-content" className="login-shell">
       <section className="login-brand-panel">
@@ -44,7 +45,7 @@ export default function LoginPage() {
           </p>
 
           <form action={loginAction} className="role-grid">
-            <button name="userId" value={SEED.engineer.id} className="role-card">
+            <button name="preset" value="engineer" className="role-card">
               <span className="role-card__number">01</span>
               <span className="role-card__icon role-card__icon--field" aria-hidden="true">
                 <span />
@@ -56,7 +57,7 @@ export default function LoginPage() {
               <span className="role-card__arrow" aria-hidden="true">→</span>
             </button>
 
-            <button name="userId" value={SEED.manager.id} className="role-card">
+            <button name="preset" value="manager" className="role-card">
               <span className="role-card__number">02</span>
               <span className="role-card__icon role-card__icon--manager" aria-hidden="true">
                 <span />
@@ -70,6 +71,29 @@ export default function LoginPage() {
               <span className="role-card__arrow" aria-hidden="true">→</span>
             </button>
           </form>
+
+          {error ? (
+            <p role="alert" className="login-error">
+              {error === "invalid"
+                ? "That email or password did not match. Try again."
+                : "Enter both email and password to sign in."}
+            </p>
+          ) : null}
+
+          <details className="login-email-details">
+            <summary>Sign in with email instead</summary>
+            <form action={loginAction} className="login-email-form">
+              <label>
+                Email
+                <input name="email" type="email" autoComplete="username" required />
+              </label>
+              <label>
+                Password
+                <input name="password" type="password" autoComplete="current-password" required />
+              </label>
+              <button type="submit">Sign in</button>
+            </form>
+          </details>
 
           <p className="login-footnote">
             <span aria-hidden="true">●</span>

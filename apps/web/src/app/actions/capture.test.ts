@@ -8,13 +8,13 @@ import { submitReport } from "./capture-core";
 import { getReport } from "@buildflow/db/queries/reports";
 import { listAttachments } from "@buildflow/db/queries/attachments";
 import { LocalFsStorage } from "@buildflow/storage/local-fs";
-import { contextForUser } from "@/app/session";
+import { resolveTenantContext } from "@buildflow/auth/context";
 
 test("submitReport stores audio+photo, creates report, runs pipeline to AWAITING_REVIEW", async () => {
   process.env.STORAGE_DIR = mkdtempSync(join(tmpdir(), "bf-cap-"));
   const db = await createTestDb();
   await seed(db);
-  const ctx = contextForUser(SEED.engineer.id);
+  const ctx = await resolveTenantContext(db, SEED.engineer.id);
   const storage = new LocalFsStorage(process.env.STORAGE_DIR);
 
   const audio = new TextEncoder().encode("fake-audio");
