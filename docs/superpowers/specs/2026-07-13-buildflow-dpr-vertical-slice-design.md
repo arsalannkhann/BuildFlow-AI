@@ -3,7 +3,7 @@
 **Status:** Approved design (ready for implementation planning)
 **Date:** 2026-07-13
 **Author:** Founder + coding agent (brainstorming session)
-**Source docs:** `PRD.md`, `Architecture.MD`, `phases.md`, `deisgn.md`, `rules.md`, `memory.md`
+**Source docs:** `PRD.md`, `Architecture.MD`, `phases.md`, `design.md`, `rules.md`, `memory.md`
 
 ## 0. Context and intent
 
@@ -236,7 +236,7 @@ Field contract (every value-bearing field):
 - `value` present or explicitly `null` — **never invented** (`rules.md` §11).
 - `source_refs`: array of `{ transcript_span?: {startMs,endMs}, attachment_id?: string }`.
 - `confidence_band`: `Supported` (direct source) | `Check` (ambiguous/conflicting) |
-  `Missing` (no support). No numeric percentages (`deisgn.md` §8).
+  `Missing` (no support). No numeric percentages (`design.md` §8).
 
 The **mock extractor** returns a deterministic structured draft derived from a fixed canned
 transcript, exercising every field type including some `Check` and `Missing` bands and at
@@ -261,7 +261,7 @@ prompt/schema/provider/model version.
 
 ## 6. Review and approval
 
-Manager review layout per `deisgn.md` §8:
+Manager review layout per `design.md` §8:
 
 - **Left pane:** structured DPR sections with editable fields. AI-drafted content visually
   distinct from confirmed content. Each field shows source badge, `confidence_band`, and
@@ -270,19 +270,19 @@ Manager review layout per `deisgn.md` §8:
   `transcript_span` and/or referenced photo.
 
 Edits write a `review_decision` (actor, timestamp, field_path, before, after) and create a
-new `report_revision`. **Approve and Issue are separate actions** (`deisgn.md` §8,
+new `report_revision`. **Approve and Issue are separate actions** (`design.md` §8,
 `memory.md` §8):
 
 - **Approve** → status `APPROVED`, audit event. No external artifact yet.
 - **Issue** → generate PDF, status `ISSUED`, `issued_document` row, audit event.
 - **Request changes** → status `REJECTED` with a reason; returns to contributor.
 
-Copy follows `deisgn.md` §18 (e.g. "2 items need confirmation", "No quantity was
+Copy follows `design.md` §18 (e.g. "2 items need confirmation", "No quantity was
 mentioned"). Approval footer shows unresolved `Check`/`Missing` critical-item count.
 
 ## 7. PDF issuance
 
-Playwright/Chromium renders an HTML/CSS A4 template (`deisgn.md` §17) from **approved data
+Playwright/Chromium renders an HTML/CSS A4 template (`design.md` §17) from **approved data
 only**. Output stored immutably via `StoragePort` (local filesystem). The `issued_document`
 carries a stable `document_id`, `version`, issue time, approver identity, and
 `template_version`. Client-safe rendering uses `summary_client_safe` and excludes internal

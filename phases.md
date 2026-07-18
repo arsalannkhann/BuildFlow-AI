@@ -1,8 +1,59 @@
 # BuildFlow AI — Delivery Phases
 
 **Status:** Execution roadmap  
-**Last updated:** 2026-07-13  
+**Last updated:** 2026-07-19  
 **Planning principle:** Exit gates determine progress; calendar dates do not.
+
+## 0. Engineering execution plan — complete MVP (decided 2026-07-19)
+
+The DPR vertical slice passed its audit (`docs/GAP-ANALYSIS.md`). Engineering now executes
+the complete MVP in six verified phases. The original go-to-market phases below (§Phase 0–9)
+remain the commercial playbook; this section governs implementation order. For each phase:
+migrations/contracts first, domain before presentation, authorization + audit with the
+feature, tests at every level, type/test/build green before continuing, `memory.md` updated,
+then continue automatically.
+
+### Phase A — foundation and migration
+Monorepo (pnpm workspaces + Turborepo): `apps/web`, `apps/mobile`, `apps/worker`,
+`packages/{domain,db,contracts,ai,storage,jobs,testkit,ui-tokens}`. Preserve slice code and
+tests. Real PostgreSQL (Docker) + PGlite test default behind one Drizzle layer; reviewed SQL
+migrations; RLS policies; portable auth adapter (dev credentials + Supabase-ready);
+expanded capability model (9 roles as bundles); transactional outbox + durable job port
+(local DB-backed runner now, Cloud Tasks adapter later); signed-URL storage port; audit
+everywhere; CI; one-command local stack.
+
+### Phase B — trusted project record
+Org/project setup (hierarchy, members, invitations, settings, CSV import), `/v1` REST API
+with OpenAPI for mobile, offline-first Expo capture app (SQLite drafts, idempotent sync,
+restart recovery), async DPR processing on the job runner, per-field review edits writing
+revisions, retry/manual fallback, client-safe report links, photo pages in PDFs, search over
+approved reports, full audit. Must be fully reliable before downstream modules consume DPR
+facts.
+
+### Phase C — project controls
+Location hierarchy use, activities/milestones/schedule (baseline vs current), manual %
+progress with evidence, dependencies, owners, first-class blockers, RFIs, drawing/document
+register with revisions, DPR↔activity daily links, project overview, explainable delay
+indicators from approved records only.
+
+### Phase D — commercial operations
+Materials catalogue/suppliers/receipts, invoice/challan OCR adapters + human review, stock
+ledger + variance + shortage alerts, RFQs and human-approved PO drafts, labour attendance +
+productivity, equipment register + reminders, Measurement Book (e-MB Preview) with
+append-only certification flow, budgets/cost codes/EAC/variance, INR/GST formatting,
+CSV/JSON exports.
+
+### Phase E — intelligence and compliance
+Portfolio exceptions dashboard, org/project-scoped search (FTS + `pgvector`), grounded
+assistant (citations, approved-vs-draft distinction, refusal on insufficient evidence, no
+mutations), notifications (in-app/email/WhatsApp adapters, preferences, delivery status),
+compliance evidence packs (DPCC/GRAP/RERA) with checklists and versioned exports.
+
+### Phase F — production hardening
+Localization (en/hi), accessibility (WCAG 2.2 AA), performance, observability, retention/
+deletion/export, backup/restore documentation, onboarding + demo org with realistic Indian
+construction data, threat model, runbooks, OpenTofu infrastructure definitions, security
+review, remove placeholders, run all release gates and the 20 acceptance scenarios.
 
 ## 1. Operating model
 

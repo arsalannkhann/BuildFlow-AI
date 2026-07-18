@@ -13,7 +13,7 @@ Before making product or technical changes, read:
 3. `phases.md` — what is authorized now and the exit gate.
 4. `Architecture.MD` — system boundaries and stack.
 5. `rules.md` — mandatory implementation rules.
-6. `deisgn.md` — UX, visual system, and product language.
+6. `design.md` — UX, visual system, and product language.
 
 If these documents disagree, stop and resolve the inconsistency rather than choosing silently.
 
@@ -23,10 +23,14 @@ BuildFlow AI is an India-first construction operations product. Its initial wedg
 
 ## 3. Current phase
 
-**Current phase:** Phase 0 — field discovery and design partners.  
-**Next phase gate:** Three companies provide real workflow access; at least two demonstrate willingness to pay; the minimum DPR schema and capture prototype are validated with actual users.
+**Current engineering phase:** Phase A — foundation and migration (of the Phase A–F complete
+MVP plan in `phases.md` §0, decided 2026-07-19).  
+**Commercial phase:** Phase 0 — field discovery and design partners (unchanged; runs in
+parallel and does not gate engineering).
 
-Do not begin full product implementation solely because the architecture is documented. The concierge pilot must establish output trust and correction patterns first.
+The DPR vertical slice was built and audited first (2026-07-13 → 2026-07-19; see
+`docs/GAP-ANALYSIS.md`): typecheck, 36 unit/integration tests, Playwright e2e, and the
+production build all pass. Engineering now expands it into the complete MVP.
 
 ## 4. Current product decision
 
@@ -150,6 +154,17 @@ The source roadmap discusses RERA, DPCC Dust Portal, GRAP, Measurement Books, Ta
 - Derived AI artifacts inherit the source record’s access and deletion policy.
 
 ## 14. Decision log
+
+### 2026-07-19 — Build the complete MVP on the audited slice
+
+**Decision:** Expand the verified DPR vertical slice into the full MVP (13 scope areas,
+Phases A–F in `phases.md` §0) instead of stopping at the wedge.  
+**Reason:** Product direction set by the founder; the slice audit showed the domain core,
+pipeline, review/issue flow, and tests are solid foundations to migrate incrementally.  
+**Constraints preserved:** AI drafts / humans approve; immutable evidence and issued
+versions; tenant isolation everywhere; no automated government submission, payments, or
+biometrics; Measurement Book ships as “e-MB Preview” pending legal review.  
+**Also:** `deisgn.md` renamed to `design.md`; all references updated.
 
 ### 2026-07-13 — Narrow initial wedge
 

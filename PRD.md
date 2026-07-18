@@ -1,18 +1,30 @@
 # BuildFlow AI — Product Requirements Document
 
 **Status:** Working specification  
-**Version:** 0.1  
-**Last updated:** 2026-07-13  
+**Version:** 0.2  
+**Last updated:** 2026-07-19  
 **Initial market:** Delhi NCR, India  
-**Initial product:** Voice-and-photo-to-Daily Progress Report (DPR)
+**Initial product:** Complete construction-operations MVP built around the trusted DPR record
 
 ## 1. Executive decision
 
-BuildFlow AI will not begin as a full construction ERP or an autonomous “AI operating system.” The first product will own one high-frequency workflow:
+**Revised 2026-07-19.** The DPR vertical slice has been built, verified end to end, and audited
+(see `docs/GAP-ANALYSIS.md`). The decision is now to expand it into a **complete,
+production-capable MVP** rather than shipping the DPR wedge alone. The DPR remains the core
+trust-building workflow and must stay the most reliable part of the product:
 
 > A site engineer records a short voice update and adds site photos. BuildFlow converts the evidence into a structured, reviewable Daily Progress Report, preserves the original inputs, and gives management a concise project update.
 
-This wedge is the foundation for later material, schedule, Measurement Book, compliance, procurement, budget, and portfolio intelligence. Expansion happens only after the daily project record is trusted and consistently used.
+The MVP now also includes, in dependency order on the trusted DPR record: organizations,
+projects and capability-based access; an offline-first Android field app; project controls
+(activities, schedule, blockers, RFIs, drawings); a Measurement Book preview workflow;
+materials, invoice OCR review and procurement drafts; labour and equipment tracking; budgets
+and cost visibility; a portfolio exceptions dashboard; permission-filtered search and a
+grounded, citation-only assistant; human-reviewed compliance evidence packs; notifications
+and secure external sharing; and administration/usage metering. Every module obeys the same
+boundaries: AI drafts, humans approve; evidence is immutable; tenants are isolated.
+
+The execution plan for this expansion is Phases A–F in `phases.md`.
 
 ## 2. Product vision
 
@@ -102,20 +114,69 @@ Needs a curated PDF or link generated from approved information only.
 - Work reliably through intermittent connectivity.
 - Prove willingness to pay on live projects.
 
-### MVP non-goals
+### MVP non-goals (still excluded after the 2026-07-19 scope expansion)
 
-- Full ERP replacement.
-- Automated procurement or payments.
-- Automated DPCC, GRAP, or RERA submission.
-- Legally authoritative Electronic Measurement Book.
-- Face-recognition attendance.
-- BIM or drawing comparison.
-- Equipment maintenance prediction.
+- Full ERP replacement (no accounting vouchers, payroll, or statutory filing).
+- Automated order placement, payment release, or accounting-voucher creation.
+- Automated DPCC, GRAP, or RERA submission to government portals.
+- Claiming the Measurement Book is a legally authoritative government e-MB (it ships as
+  “Measurement Book / e-MB Preview” pending qualified domain and legal review).
+- Face-recognition or biometric attendance.
+- BIM or automated drawing comparison.
+- Predictive equipment maintenance models (deterministic date/hour reminders only).
 - Computer-vision progress percentage.
-- General-purpose portfolio chatbot.
+- An assistant that answers beyond cited internal records or mutates data.
 - Neo4j or a construction ontology implementation.
+- Full Primavera/Microsoft Project scheduling replacement.
+- Payment automation for BuildFlow billing itself (manual billing state at MVP).
 
 ## 8. MVP scope
+
+**Scope note (2026-07-19).** Sections 8.1–8.7 describe the DPR core and remain authoritative
+for it. The complete MVP additionally comprises the following modules, specified in
+`phases.md` (Phases A–F) and governed by the same review/immutability/tenancy rules:
+
+1. **Organizations, projects, access** — org settings; multiple projects; location hierarchy
+   (site → building → zone → floor → room → activity); nine roles expressed as capability
+   bundles (org owner, project admin, project manager, site engineer, quantity surveyor,
+   procurement manager, accountant, client viewer, auditor); per-project roles; invitations
+   by email/mobile; project timezone/address/coordinates/client/cutoff/template/recipients;
+   CSV import for locations, activities, budget lines, basic schedules.
+2. **Offline-first field app** — Android-first Expo app: secure auth, Today screen, voice
+   with pause/resume/playback, photos/gallery/documents, SQLite drafts and sync commands,
+   resumable idempotent uploads, restart recovery, English/Hindi foundations.
+3. **DPR completion** — per-field review edits writing revisions, contradiction highlighting,
+   client-safe links, superseding corrections, photo pages in the issued PDF, async
+   processing with retry/manual fallback, Hindi/Hinglish support.
+4. **Project controls** — activities, milestones, schedule items, baseline vs current dates,
+   manual % progress with evidence links, dependencies, owners, first-class blockers, RFIs,
+   drawing/document register with revisions, DPR↔activity links, explainable delay
+   indicators from approved records only.
+5. **Measurement Book (e-MB Preview)** — dimensions, deterministic quantity calculation,
+   draft/submitted/verified/rejected/certified states, geotagged evidence, append-only
+   corrections, MB register and RA-bill supporting exports.
+6. **Materials, invoices, procurement** — catalogue, units, suppliers, challan/invoice OCR
+   behind adapters with mandatory human review, stock ledger, variance, shortage alerts,
+   RFQs, human-approved PO drafts, Tally-suitable CSV/JSON export.
+7. **Labour and equipment** — trades, contractors, daily attendance totals, optional GPS
+   check-in (no biometrics), productivity vs approved quantities, equipment register,
+   assignments, usage/fuel/downtime, deterministic service reminders.
+8. **Budget and cost** — budgets and versions, cost codes/lines,
+   committed/invoiced/paid/forecast, approved-invoice linkage, transparent deterministic
+   EAC, variance explanations linked to sources, INR/Indian numbering/GST-aware fields.
+9. **Portfolio dashboard** — actionable exceptions first; every metric links to underlying
+   records.
+10. **Search and grounded assistant** — Postgres FTS + `pgvector`, permission-filtered before
+    ranking; assistant cites internal records, separates approved facts from drafts, refuses
+    on insufficient evidence, never mutates records or invents values.
+11. **Compliance evidence packs** — DPCC/GRAP/RERA support material: checklists, owners, due
+    dates, missing-evidence warnings, versioned PDF/ZIP exports, human review status; drafts
+    until authorized people sign.
+12. **Notifications and sharing** — in-app, email adapter, WhatsApp adapter (mock locally),
+    preferences, delivery status/retries, secure expiring client links.
+13. **Administration and commercial readiness** — admin UI, usage meters, Starter/
+    Professional/Enterprise entitlements, manual billing state, export/retention/deletion,
+    audit-log viewer, provider-health dashboard, demo org, onboarding and CSV templates.
 
 ### 8.1 Organization and project setup
 

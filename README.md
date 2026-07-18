@@ -1,4 +1,10 @@
-# BuildFlow — DPR vertical slice
+# BuildFlow AI
+
+**Status (2026-07-19):** the DPR vertical slice below passed its audit
+(`docs/GAP-ANALYSIS.md`) and is being expanded into the complete construction-operations
+MVP — Phases A–F in `phases.md` §0. This README is updated as each phase lands.
+
+## The DPR core
 
 A runnable end-to-end slice of the BuildFlow DPR workflow: capture (browser voice note +
 photos) → transcribe → strict structured DPR extraction → manager review with evidence →

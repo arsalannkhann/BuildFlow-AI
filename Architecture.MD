@@ -1,8 +1,8 @@
 # BuildFlow AI — Technical Architecture
 
 **Status:** Architecture baseline  
-**Version:** 0.1  
-**Last updated:** 2026-07-13  
+**Version:** 0.2  
+**Last updated:** 2026-07-19  
 **Scope:** MVP through paid beta
 
 ## 1. Architecture decision
@@ -10,6 +10,18 @@
 BuildFlow starts as a **modular monolith with asynchronous workers**, not a collection of microservices. It uses PostgreSQL as the transactional source of truth, object storage for evidence, and an offline-first mobile data layer. AI is a replaceable processing subsystem, never the database of record.
 
 This gives the team fast iteration, simple transactions, and clear boundaries without paying the operational cost of distributed services prematurely.
+
+**Implementation status (2026-07-19).** The complete-MVP build (Phases A–F, `phases.md` §0)
+is being executed on the audited DPR vertical slice. Where the implementation deviates from
+the preferred stack in §4, the deviation and its reasoning are recorded in `docs/adr/`;
+current ADRs:
+
+- ADR-0001 — API served by Next.js route handlers/server actions (modular monolith) instead
+  of a separate NestJS deployable for the MVP; NestJS extraction path preserved.
+- ADR-0002 — One Drizzle layer over two Postgres drivers: real PostgreSQL (Docker/managed)
+  as the production path, embedded PGlite as the zero-dependency test/dev default.
+- ADR-0003 — Durable background work via transactional outbox + DB-backed job runner behind
+  a queue port; Google Cloud Tasks adapter is the production implementation.
 
 ## 2. Architecture principles
 

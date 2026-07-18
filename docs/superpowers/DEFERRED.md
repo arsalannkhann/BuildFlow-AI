@@ -27,14 +27,14 @@ architecture in miniature; these are the parts deliberately left for later.
 
 - **Inline per-field editing that writes new revisions.** The review UI currently shows
   confidence bands + evidence and drives approve/issue; it does not yet persist field-level
-  edits (confirm / correct / remove / mark-unknown → new revision). This is the `deisgn.md`
+  edits (confirm / correct / remove / mark-unknown → new revision). This is the `design.md`
   §8 edit-controls behavior, deferred from the slice.
 - **Evidence-link rows.** Source references currently live inside the revision's
   `structured_data` JSONB and are rendered from there. The `evidence_link` table exists but
   is not populated; a dedicated stage can materialize it if relational queries over evidence
   are needed.
 - **Photo embedding + multi-page pagination in the issued PDF.** The A4 template renders the
-  structured sections; selected photo evidence and pagination controls (`deisgn.md` §17) are
+  structured sections; selected photo evidence and pagination controls (`design.md` §17) are
   not yet included.
 - **Retry / manual-fallback UI for `PROCESSING_FAILED`.** Inputs are preserved and the state
   machine allows `PROCESSING_FAILED → PROCESSING` (retry) and `→ AWAITING_REVIEW` (manual

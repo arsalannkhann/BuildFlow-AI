@@ -1,8 +1,8 @@
 # BuildFlow AI — Product and Interface Design System
 
 **Status:** Design baseline  
-**Last updated:** 2026-07-13  
-**Filename note:** `deisgn.md` preserves the filename requested for this project.
+**Last updated:** 2026-07-19  
+**Filename note:** renamed from `deisgn.md` to `design.md` on 2026-07-19.
 
 ## 1. Design objective
 

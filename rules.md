@@ -3,7 +3,7 @@
 **Status:** Mandatory repository rules  
 **Last updated:** 2026-07-13
 
-These rules govern implementation unless a reviewed Architecture Decision Record (ADR) explicitly replaces one. Product scope is defined in `PRD.md`; system structure is defined in `Architecture.MD`; interface behavior is defined in `deisgn.md`.
+These rules govern implementation unless a reviewed Architecture Decision Record (ADR) explicitly replaces one. Product scope is defined in `PRD.md`; system structure is defined in `Architecture.MD`; interface behavior is defined in `design.md`.
 
 ## 1. Priority order
 
@@ -261,7 +261,7 @@ A flaky test is a defect. Fix or quarantine it with an owner and expiry; do not 
 
 ## 20. UX implementation
 
-- Follow `deisgn.md` even though the filename contains the original requested spelling.
+- Follow `design.md`.
 - Mobile capture is designed for one-hand use, sunlight, noise, and low connectivity.
 - Primary touch targets are at least 48×48 dp.
 - Never use color alone to communicate status.
