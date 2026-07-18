@@ -4,6 +4,7 @@ const nextConfig = {
   transpilePackages: [
     "@buildflow/ai",
     "@buildflow/auth",
+    "@buildflow/contracts",
     "@buildflow/db",
     "@buildflow/domain",
     "@buildflow/jobs",

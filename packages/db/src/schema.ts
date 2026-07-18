@@ -77,6 +77,63 @@ export const jobs = pgTable("job", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+
+// --- Phase B: project structure, invitations, client links ---
+
+// Project hierarchy: site -> building -> zone -> floor -> room. Rows form a tree via
+// parent_id; kind is informational (labels differ across sites), depth is not enforced.
+export const locations = pgTable("location", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull(),
+  projectId: text("project_id").notNull(),
+  parentId: text("parent_id"),
+  kind: text("kind").notNull(), // site | building | zone | floor | room
+  name: text("name").notNull(),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: ts(),
+});
+
+export const activities = pgTable("activity", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull(),
+  projectId: text("project_id").notNull(),
+  name: text("name").notNull(),
+  unit: text("unit"),
+  locationId: text("location_id"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: ts(),
+});
+
+// Invitations by email or mobile; the raw token is mailed/messaged, only its hash is stored.
+export const invitations = pgTable("invitation", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull(),
+  projectId: text("project_id"),
+  email: text("email"),
+  mobile: text("mobile"),
+  role: text("role").notNull(),
+  tokenHash: text("token_hash").notNull().unique(),
+  status: text("status").notNull().default("pending"), // pending | accepted | revoked | expired
+  invitedBy: text("invited_by").notNull(),
+  acceptedUserId: text("accepted_user_id"),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdAt: ts(),
+});
+
+// Secure expiring client links to one issued document (rules.md §16: revocable, scoped,
+// expiring). The raw token appears only in the shared URL; we store its hash.
+export const clientLinks = pgTable("client_link", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull(),
+  reportId: text("report_id").notNull(),
+  issuedDocumentId: text("issued_document_id").notNull(),
+  tokenHash: text("token_hash").notNull().unique(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  createdBy: text("created_by").notNull(),
+  createdAt: ts(),
+});
+
 export const dailyReports = pgTable("daily_report", {
   id: text("id").primaryKey(),
   organizationId: text("organization_id").notNull(),
@@ -86,6 +143,9 @@ export const dailyReports = pgTable("daily_report", {
   createdBy: text("created_by").notNull(),
   currentRevisionId: text("current_revision_id"),
   note: text("note"),
+  // Mobile offline sync: the device-generated report id makes resubmission idempotent
+  // (unique per org+creator, enforced by partial unique index in migration 0003).
+  clientReportId: text("client_report_id"),
   createdAt: ts(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
@@ -115,6 +175,10 @@ export const attachments = pgTable("attachment", {
   byteSize: bigint("byte_size", { mode: "number" }).notNull(),
   checksum: text("checksum").notNull(),
   capturedAt: timestamp("captured_at", { withTimezone: true }),
+  // Mobile sync: device-generated id for idempotent manifest upserts; uploadedAt is set
+  // once the object content is stored and checksum-verified (null = still expected).
+  clientAttachmentId: text("client_attachment_id"),
+  uploadedAt: timestamp("uploaded_at", { withTimezone: true }),
   createdAt: ts(),
 });
 
@@ -193,6 +257,7 @@ export const auditEvents = pgTable("audit_event", {
 
 export const schema = {
   organizations, users, authCredentials, sessions, projects, memberships, jobs,
+  locations, activities, invitations, clientLinks,
   dailyReports, reportRevisions,
   attachments, evidenceLinks, processingRuns, processingStages, reviewDecisions,
   issuedDocuments, auditEvents,

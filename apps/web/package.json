@@ -13,12 +13,14 @@
   "dependencies": {
     "@buildflow/ai": "workspace:*",
     "@buildflow/auth": "workspace:*",
+    "@buildflow/contracts": "workspace:*",
     "@buildflow/db": "workspace:*",
     "@buildflow/domain": "workspace:*",
     "@buildflow/jobs": "workspace:*",
     "@buildflow/pdf": "workspace:*",
     "@buildflow/pipeline": "workspace:*",
     "@buildflow/storage": "workspace:*",
+    "drizzle-orm": "^0.36.0",
     "next": "^15.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"

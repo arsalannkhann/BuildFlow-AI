@@ -8,16 +8,29 @@ import type { TenantContext } from "@buildflow/domain/tenancy";
 type Report = typeof dailyReports.$inferSelect;
 
 export async function createReport(
-  db: AppDb, ctx: TenantContext, input: { reportDate: string; note?: string },
+  db: AppDb, ctx: TenantContext,
+  input: { reportDate: string; note?: string; status?: "UPLOADED" | "SYNCING"; clientReportId?: string },
 ): Promise<Report> {
   if (!ctx.projectId) throw new Error("projectId required to create a report");
   const id = newId();
   const [row] = await db.insert(dailyReports).values({
     id, organizationId: ctx.organizationId, projectId: ctx.projectId,
-    reportDate: input.reportDate, status: "UPLOADED", createdBy: ctx.userId,
-    note: input.note ?? null,
+    reportDate: input.reportDate, status: input.status ?? "UPLOADED", createdBy: ctx.userId,
+    note: input.note ?? null, clientReportId: input.clientReportId ?? null,
   }).returning();
   return row;
+}
+
+/** Idempotent-manifest lookup: the mobile device retries with the same clientReportId. */
+export async function getReportByClientId(
+  db: AppDb, ctx: TenantContext, clientReportId: string,
+): Promise<Report | null> {
+  const [row] = await db.select().from(dailyReports).where(and(
+    eq(dailyReports.organizationId, ctx.organizationId),
+    eq(dailyReports.createdBy, ctx.userId),
+    eq(dailyReports.clientReportId, clientReportId),
+  ));
+  return row ?? null;
 }
 
 export async function getReport(db: AppDb, ctx: TenantContext, id: string): Promise<Report> {
