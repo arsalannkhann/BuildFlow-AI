@@ -2944,3 +2944,14 @@ textarea:focus-visible {
 .admin-invite-notice { border-left: 4px solid var(--success-700, #16794b); }
 .admin-invite-notice__link { display: block; padding: 12px; background: var(--neutral-50, #f9fafb); border-radius: 8px; word-break: break-all; font-size: 14px; }
 .invite-shell { max-width: 640px; margin: 48px auto; }
+
+/* Field decisions + failure dock (Phase B) */
+.field-decisions { display: grid; gap: 12px; margin-top: 12px; }
+.field-decisions__row { display: flex; gap: 8px; flex-wrap: wrap; }
+.field-decisions__edit { border-top: 1px solid var(--neutral-200, #e5e7eb); padding-top: 12px; }
+.review-action-dock--failed { border-left: 4px solid var(--warning-700, #996a00); }
+
+/* Report search (Phase B) */
+.reports-search { margin: 16px 0; }
+.reports-search__form { display: flex; gap: 8px; max-width: 560px; }
+.reports-search__form input[type="search"] { flex: 1; min-height: 44px; padding: 8px 14px; border: 1px solid var(--neutral-200, #e5e7eb); border-radius: 10px; font-size: 16px; }

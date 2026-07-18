@@ -51,3 +51,111 @@ export async function issueReport(db: AppDb, storage: StoragePort, ctx: TenantCo
   await audit(db, ctx, { action: "report.issued", subjectRef: reportId, metadata: { documentId, version } });
   return objectKey;
 }
+
+// --- Phase B additions: field decisions, failure recovery, client links ---
+
+import { addRevision, getRevision } from "@buildflow/db/queries/revisions";
+import { setCurrentRevision } from "@buildflow/db/queries/reports";
+import { applyFieldDecision, type FieldDecision } from "@buildflow/domain/dpr/edit";
+import { DPR_SCHEMA_VERSION } from "@buildflow/domain/dpr/schema";
+import { enqueueJob } from "@buildflow/jobs/queue";
+import { drainJobs } from "@buildflow/jobs/runner";
+import { pipelineJobRegistry, REPORT_PROCESS_JOB } from "@buildflow/pipeline/jobs";
+import { addClientLink, listClientLinks, revokeClientLink } from "@buildflow/db/queries/client-links";
+
+export async function applyReviewFieldDecision(
+  db: AppDb, ctx: TenantContext, reportId: string,
+  input: { path: string; decision: FieldDecision; newValue?: unknown },
+): Promise<void> {
+  assertCan(ctx, "report.review");
+  const report = await getReport(db, ctx, reportId);
+  if (report.status !== "AWAITING_REVIEW") {
+    throw new Error("Field decisions are only allowed while the report awaits review");
+  }
+  const rev = await latestRevision(db, ctx, reportId);
+  if (!rev) throw new Error("No revision to edit");
+  const { data, before, after } = applyFieldDecision(
+    rev.structuredData as DprStructuredData, input.path, input.decision, input.newValue,
+  );
+  await db.transaction(async (txRaw) => {
+    const tx = txRaw as unknown as AppDb;
+    const nextRev = await addRevision(tx, ctx, {
+      reportId, structuredData: data, isAiGenerated: false,
+      summaryInternal: rev.summaryInternal ?? undefined,
+      summaryClientSafe: rev.summaryClientSafe ?? undefined,
+      transcript: rev.transcript ?? undefined,
+    });
+    await setCurrentRevision(tx, ctx, reportId, nextRev.id);
+    await recordDecision(tx, ctx, {
+      reportId, decision: input.decision, fieldPath: input.path,
+      revisionId: nextRev.id, beforeValue: before, afterValue: after,
+    });
+    await audit(tx, ctx, {
+      action: "report.field_decision", subjectRef: reportId,
+      metadata: { path: input.path, decision: input.decision, revisionId: nextRev.id },
+    });
+  });
+}
+
+const inlineJobs = () => (process.env.JOBS_MODE ?? "inline") !== "worker";
+
+/** PROCESSING_FAILED -> PROCESSING with a fresh job. The status transition inside the
+ * transaction makes double-clicks race-safe (second transition fails). */
+export async function retryProcessing(db: AppDb, ctx: TenantContext, reportId: string): Promise<void> {
+  assertCan(ctx, "report.review");
+  await db.transaction(async (txRaw) => {
+    const tx = txRaw as unknown as AppDb;
+    await setReportStatus(tx, ctx, reportId, "PROCESSING");
+    await enqueueJob(tx, {
+      organizationId: ctx.organizationId, kind: REPORT_PROCESS_JOB,
+      payload: { reportId, userId: ctx.userId, projectId: ctx.projectId },
+      idempotencyKey: `${REPORT_PROCESS_JOB}:${reportId}:retry:${newId()}`,
+    });
+    await audit(tx, ctx, { action: "report.processing_retried", subjectRef: reportId });
+  });
+  if (inlineJobs()) await drainJobs(db, pipelineJobRegistry);
+}
+
+/** PROCESSING_FAILED -> AWAITING_REVIEW with an empty human draft: inputs stay available,
+ * the reviewer fills the record manually (design.md §7 recoverable failure). */
+export async function createManualDraft(db: AppDb, ctx: TenantContext, reportId: string): Promise<void> {
+  assertCan(ctx, "report.review");
+  const empty: DprStructuredData = {
+    schema_version: DPR_SCHEMA_VERSION,
+    work_items: [], labour: [], materials: [], equipment: [], safety_quality: [],
+    blockers: [], tomorrow_plan: [],
+    weather_site_condition: { value: null, source_refs: [], confidence_band: "Missing" },
+  };
+  await db.transaction(async (txRaw) => {
+    const tx = txRaw as unknown as AppDb;
+    const rev = await addRevision(tx, ctx, { reportId, structuredData: empty, isAiGenerated: false });
+    await setCurrentRevision(tx, ctx, reportId, rev.id);
+    await setReportStatus(tx, ctx, reportId, "AWAITING_REVIEW");
+    await audit(tx, ctx, { action: "report.manual_draft_created", subjectRef: reportId, metadata: { revisionId: rev.id } });
+  });
+}
+
+export async function createReportClientLink(
+  db: AppDb, ctx: TenantContext, reportId: string,
+): Promise<{ token: string; expiresAt: Date }> {
+  assertCan(ctx, "report.issue");
+  const report = await getReport(db, ctx, reportId);
+  if (report.status !== "ISSUED" && report.status !== "SUPERSEDED") {
+    throw new Error("Client links are only available for issued reports");
+  }
+  const issued = await latestIssued(db, ctx, reportId);
+  if (!issued) throw new Error("No issued document");
+  const link = await addClientLink(db, ctx, { reportId, issuedDocumentId: issued.id });
+  await audit(db, ctx, { action: "client_link.created", subjectRef: reportId, metadata: { linkId: link.id, expiresAt: link.expiresAt.toISOString() } });
+  return { token: link.token, expiresAt: link.expiresAt };
+}
+
+export async function revokeReportClientLink(
+  db: AppDb, ctx: TenantContext, reportId: string, linkId: string,
+): Promise<void> {
+  assertCan(ctx, "report.issue");
+  const links = await listClientLinks(db, ctx, reportId);
+  if (!links.some((l) => l.id === linkId)) throw new Error("Link not found");
+  await revokeClientLink(db, ctx, linkId);
+  await audit(db, ctx, { action: "client_link.revoked", subjectRef: reportId, metadata: { linkId } });
+}

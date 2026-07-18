@@ -4,7 +4,7 @@ import { newId } from "@buildflow/domain/ids";
 import type { TenantContext } from "@buildflow/domain/tenancy";
 
 export async function recordDecision(db: AppDb, ctx: TenantContext, input: {
-  reportId: string; revisionId?: string; decision: "approve" | "reject" | "edit";
+  reportId: string; revisionId?: string; decision: "approve" | "reject" | "edit" | "confirm" | "remove" | "mark_unknown";
   reason?: string; fieldPath?: string; beforeValue?: unknown; afterValue?: unknown;
 }): Promise<void> {
   await db.insert(reviewDecisions).values({

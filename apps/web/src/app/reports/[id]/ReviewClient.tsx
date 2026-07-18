@@ -3,8 +3,12 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { unresolvedCount, type FieldRow } from "../view-model";
-import { approveAction, requestChangesAction, issueAction } from "@/app/actions/review";
+import {
+  approveAction, requestChangesAction, issueAction, retryProcessingAction,
+  manualDraftAction, createClientLinkAction, revokeClientLinkAction,
+} from "@/app/actions/review";
 import { StatusBadge } from "@/app/components/StatusBadge";
+import { FieldDecisionPanel } from "./FieldDecisionPanel";
 
 const bandStyle: Record<string, string> = {
   Supported: "review-band review-band--supported",
@@ -29,7 +33,10 @@ export function ReviewClient(props: {
   transcript: string;
   canApprove: boolean;
   canIssue: boolean;
+  canReview: boolean;
   photoCount: number;
+  clientLinkToken?: string | null;
+  activeClientLinks?: { id: string; expiresAt: string }[];
 }) {
   const [selected, setSelected] = useState<string | null>(
     props.rows.find((row) => row.band !== "Supported")?.path ?? props.rows[0]?.path ?? null,
@@ -165,6 +172,9 @@ export function ReviewClient(props: {
                 </span>
                 <em>{selectedRow.refs.length} source {selectedRow.refs.length === 1 ? "reference" : "references"}</em>
               </div>
+              {props.status === "AWAITING_REVIEW" && props.canReview && (
+                <FieldDecisionPanel reportId={props.reportId} row={selectedRow} />
+              )}
             </div>
           )}
 
@@ -243,6 +253,25 @@ export function ReviewClient(props: {
         </section>
       )}
 
+      {props.status === "PROCESSING_FAILED" && props.canReview && (
+        <section className="review-action-dock review-action-dock--failed">
+          <div>
+            <strong>Couldn&apos;t finish processing</strong>
+            <small>The audio and photos are safe. Retry the AI draft, or prepare the report manually.</small>
+          </div>
+          <div className="review-action-dock__actions">
+            <form action={retryProcessingAction}>
+              <input type="hidden" name="reportId" value={props.reportId} />
+              <button className="primary-button">Retry processing</button>
+            </form>
+            <form action={manualDraftAction}>
+              <input type="hidden" name="reportId" value={props.reportId} />
+              <button className="secondary-button">Prepare manually</button>
+            </form>
+          </div>
+        </section>
+      )}
+
       {props.status === "ISSUED" && (
         <section className="review-action-dock review-action-dock--issued">
           <div>
@@ -252,6 +281,33 @@ export function ReviewClient(props: {
           <a href={`/api/reports/${props.reportId}/pdf`} className="primary-button">
             Download issued PDF
           </a>
+        </section>
+      )}
+
+      {(props.status === "ISSUED" || props.status === "SUPERSEDED") && props.canIssue && (
+        <section className="surface-card admin-section" aria-labelledby="client-share">
+          <h2 id="client-share">Client sharing</h2>
+          {props.clientLinkToken && (
+            <div className="admin-invite-notice">
+              <p>Secure client link created — shown once, expires in 30 days:</p>
+              <code className="admin-invite-notice__link">
+                {typeof window === "undefined" ? "" : `${window.location.origin}/r/${props.clientLinkToken}`}
+              </code>
+            </div>
+          )}
+          {(props.activeClientLinks ?? []).map((link) => (
+            <form key={link.id} action={revokeClientLinkAction} className="admin-inline-form">
+              <span>Active link · expires {new Date(link.expiresAt).toLocaleDateString("en-IN")}</span>
+              <input type="hidden" name="reportId" value={props.reportId} />
+              <input type="hidden" name="linkId" value={link.id} />
+              <button type="submit" className="secondary-button">Revoke</button>
+            </form>
+          ))}
+          <form action={createClientLinkAction}>
+            <input type="hidden" name="reportId" value={props.reportId} />
+            <button type="submit" className="secondary-button">Create client link</button>
+          </form>
+          <small>Clients see only the client-safe summary and the issued PDF — never internal notes or drafts.</small>
         </section>
       )}
     </main>

@@ -8,9 +8,14 @@ import { ReviewClient } from "./ReviewClient";
 import type { DprStructuredData } from "@buildflow/domain/dpr/schema";
 import { AppHeader } from "@/app/components/AppHeader";
 import { AutoRefresh } from "@/app/components/AutoRefresh";
+import { listClientLinks } from "@buildflow/db/queries/client-links";
 
-export default async function ReportPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function ReportPage({ params, searchParams }: {
+  params: Promise<{ id: string }>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const { id } = await params;
+  const query = (await searchParams) ?? {};
   const db = await getDb();
   const ctx = await currentContext();
   const report = await getReport(db, ctx, id);
@@ -20,6 +25,9 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
   const transcript = (rev?.transcript as { text: string } | null)?.text ?? "";
   const photoIds = atts.filter((a) => a.kind === "photo").map((a) => a.id);
   const canApprove = ctx.capabilities.includes("report.approve");
+  const canReview = ctx.capabilities.includes("report.review");
+  const clientLinks = (report.status === "ISSUED" || report.status === "SUPERSEDED")
+    ? await listClientLinks(db, ctx, id) : [];
 
   const processing = report.status === "UPLOADED" || report.status === "PROCESSING";
   return (
@@ -37,7 +45,12 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
         transcript={transcript}
         canApprove={canApprove}
         canIssue={ctx.capabilities.includes("report.issue")}
+        canReview={canReview}
         photoCount={photoIds.length}
+        clientLinkToken={typeof query.clientLink === "string" ? query.clientLink : null}
+        activeClientLinks={clientLinks
+          .filter((l) => !l.revokedAt && l.expiresAt.getTime() > Date.now())
+          .map((l) => ({ id: l.id, expiresAt: l.expiresAt.toISOString() }))}
       />
     </>
   );

@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@buildflow/contracts": "workspace:*",
+    "@expo/vector-icons": "^15.0.3",
     "@react-native-community/netinfo": "11.4.1",
     "expo": "~54.0.36",
     "expo-audio": "~1.1.1",

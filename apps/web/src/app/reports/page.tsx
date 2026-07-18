@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getDb } from "@buildflow/db/client";
 import { currentContext } from "@/app/session";
 import { listReports } from "@buildflow/db/queries/reports";
+import { searchApprovedReports } from "@buildflow/db/queries/search";
 import { AppHeader } from "@/app/components/AppHeader";
 import { StatusBadge } from "@/app/components/StatusBadge";
 
@@ -19,9 +20,14 @@ function formatReportDate(value: string): { day: string; month: string; full: st
   };
 }
 
-export default async function ReportsPage() {
+export default async function ReportsPage({
+  searchParams,
+}: { searchParams?: Promise<Record<string, string | string[] | undefined>> }) {
+  const params = (await searchParams) ?? {};
+  const q = typeof params.q === "string" ? params.q : "";
   const db = await getDb();
   const ctx = await currentContext();
+  const searchHits = q ? await searchApprovedReports(db, ctx, q) : null;
   const reports = await listReports(db, ctx);
   const canCapture = ctx.capabilities.includes("report.create");
   const isManager = ctx.capabilities.includes("report.approve");
@@ -42,6 +48,38 @@ export default async function ReportsPage() {
         canCapture={canCapture}
       />
       <main id="main-content" className="page-shell reports-page">
+        <section className="reports-search" aria-label="Search approved reports">
+          <form method="get" className="reports-search__form">
+            <label className="sr-only" htmlFor="report-search">Search approved reports</label>
+            <input
+              id="report-search" name="q" type="search" defaultValue={q}
+              placeholder="Search approved reports and transcripts…" className="text-field"
+            />
+            <button type="submit" className="secondary-button">Search</button>
+          </form>
+          {searchHits !== null && (
+            <div className="surface-card admin-section">
+              <h2>{searchHits.length} result{searchHits.length === 1 ? "" : "s"} for “{q}”</h2>
+              {searchHits.length === 0 && (
+                <p className="admin-empty">No approved report matches. Drafts are not searchable.</p>
+              )}
+              <ul className="admin-list">
+                {searchHits.map((hit) => (
+                  <li key={hit.reportId} className="admin-list__row">
+                    <div>
+                      <strong>
+                        <Link href={`/reports/${hit.reportId}`}>{hit.reportDate}</Link>
+                      </strong>
+                      <small>{hit.summary?.slice(0, 160) ?? ""}</small>
+                    </div>
+                    <StatusBadge status={hit.status} />
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </section>
+
         <section className="reports-intro">
           <div>
             <p className="eyebrow">{today}</p>
