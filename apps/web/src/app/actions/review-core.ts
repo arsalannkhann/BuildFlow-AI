@@ -5,6 +5,7 @@ import { assertCan } from "@buildflow/domain/tenancy";
 import { assertTransition, type ReportStatus } from "@buildflow/domain/report/state";
 import { newId } from "@buildflow/domain/ids";
 import { getReport, setReportStatus } from "@buildflow/db/queries/reports";
+import { listAttachments } from "@buildflow/db/queries/attachments";
 import { latestRevision } from "@buildflow/db/queries/revisions";
 import { recordDecision } from "@buildflow/db/queries/review";
 import { addIssued, latestIssued } from "@buildflow/db/queries/issued";
@@ -38,10 +39,28 @@ export async function issueReport(db: AppDb, storage: StoragePort, ctx: TenantCo
   const prev = await latestIssued(db, ctx, reportId);
   const version = (prev?.version ?? 0) + 1;
   const documentId = newId();
+
+  // Embed up to 10 verified photo attachments as evidence pages. Bytes come only from
+  // our own storage via stored object keys; encoded server-side as data URIs.
+  const attachmentRows = await listAttachments(db, ctx, reportId);
+  const photos = [];
+  for (const att of attachmentRows.filter((a) => a.kind === "photo").slice(0, 10)) {
+    try {
+      const bytes = await storage.get(att.objectKey);
+      photos.push({
+        dataUri: `data:${att.contentType};base64,${Buffer.from(bytes).toString("base64")}`,
+        capturedAt: att.capturedAt ? att.capturedAt.toISOString().slice(0, 16).replace("T", " ") : null,
+      });
+    } catch {
+      // A missing derivative must not block issuance; the structured record stands alone.
+    }
+  }
+
   const pdf = await renderDprPdf({
     documentId, version, reportDate: report.reportDate,
     data: rev.structuredData as DprStructuredData,
     summaryClientSafe: rev.summaryClientSafe ?? "", issuedBy: ctx.userId,
+    photos,
   });
   const objectKey = `org/${ctx.organizationId}/report/${reportId}/issued/${documentId}.pdf`;
   await storage.put(objectKey, pdf, "application/pdf");
