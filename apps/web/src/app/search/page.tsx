@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getDb } from "@buildflow/db/client";
+import { withTenant } from "@buildflow/db/tenant";
 import { currentContext } from "@/app/session";
 import { listProjects } from "@buildflow/db/queries/projects";
 import { AppHeader } from "@/app/components/AppHeader";
@@ -26,8 +27,11 @@ export default async function SearchPage({ searchParams }: {
 
   const db = await getDb();
   const ctx = await currentContext();
-  const projects = await listProjects(db, ctx);
-  const result = q ? await runSearch(db, ctx, { query: q, kind, projectId, dateFrom, dateTo }) : null;
+  const { projects, result } = await withTenant(db, ctx, async (tx) => {
+    const projects = await listProjects(tx, ctx);
+    const result = q ? await runSearch(tx, ctx, { query: q, kind, projectId, dateFrom, dateTo }) : null;
+    return { projects, result };
+  });
 
   return (
     <>

@@ -1,4 +1,5 @@
 import { getDb } from "@buildflow/db/client";
+import { withTenant } from "@buildflow/db/tenant";
 import { currentContext } from "@/app/session";
 import { getProject } from "@buildflow/db/queries/projects";
 import { getRfi, listRfiResponses } from "@buildflow/db/queries/controls";
@@ -12,15 +13,17 @@ export default async function RfiDetailPage({ params }: { params: Promise<{ id: 
   const db = await getDb();
   const base = await currentContext();
   const ctx = { ...base, projectId: id };
-  const project = await getProject(db, ctx, id);
-  const rfi = await getRfi(db, ctx, rfiId);
+  const { project, rfi } = await withTenant(db, ctx, async (tx) => ({
+    project: await getProject(tx, ctx, id),
+    rfi: await getRfi(tx, ctx, rfiId),
+  }));
   if (!rfi || rfi.projectId !== id) notFound();
-  const responses = await listRfiResponses(db, ctx, rfiId);
+  const responses = await withTenant(db, ctx, (tx) => listRfiResponses(tx, ctx, rfiId));
   const canManage = ctx.capabilities.includes("rfi.manage");
 
   return (
     <>
-      <AppHeader roleLabel="Project" canCapture={ctx.capabilities.includes("report.create")} />
+      <AppHeader roleLabel="Project" canCapture={ctx.capabilities.includes("report.create")} projectName={project.name} />
       <main id="main-content" className="page-shell">
         <p className="eyebrow">{project.name} · RFI-{String(rfi.number).padStart(3, "0")} · {rfi.status}</p>
         <h1 className="page-title">{rfi.subject}</h1>

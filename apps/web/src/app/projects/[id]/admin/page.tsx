@@ -1,4 +1,5 @@
 import { getDb } from "@buildflow/db/client";
+import { withTenant } from "@buildflow/db/tenant";
 import { currentContext } from "@/app/session";
 import { AppHeader } from "@/app/components/AppHeader";
 import { getProject } from "@buildflow/db/queries/projects";
@@ -24,14 +25,14 @@ export default async function ProjectAdminPage({
   const db = await getDb();
   const base = await currentContext();
   const ctx = { ...base, projectId: id };
-  const project = await getProject(db, ctx, id);
+  const project = await withTenant(db, ctx, (tx) => getProject(tx, ctx, id));
   const canManage = ctx.capabilities.includes("project.manage");
   const canMembers = ctx.capabilities.includes("project.members.manage");
-  const [locationRows, activityRows, members, invitations] = await Promise.all([
-    listLocations(db, ctx, id), listActivities(db, ctx, id),
-    listMembers(db, ctx, id),
-    canMembers ? listInvitations(db, ctx, id) : Promise.resolve([]),
-  ]);
+  const [locationRows, activityRows, members, invitations] = await withTenant(db, ctx, (tx) => Promise.all([
+    listLocations(tx, ctx, id), listActivities(tx, ctx, id),
+    listMembers(tx, ctx, id),
+    canMembers ? listInvitations(tx, ctx, id) : Promise.resolve([]),
+  ]));
   const locationName = new Map(locationRows.map((l) => [l.id, l.name]));
   const invitedToken = typeof query.invited === "string" ? query.invited : null;
 

@@ -1,4 +1,5 @@
 import { getDb } from "@buildflow/db/client";
+import { withTenant } from "@buildflow/db/tenant";
 import { currentContext } from "@/app/session";
 import { getProject } from "@buildflow/db/queries/projects";
 import { getDocument, listDocumentRevisions } from "@buildflow/db/queries/controls";
@@ -12,15 +13,17 @@ export default async function DocumentDetailPage({ params }: { params: Promise<{
   const db = await getDb();
   const base = await currentContext();
   const ctx = { ...base, projectId: id };
-  const project = await getProject(db, ctx, id);
-  const doc = await getDocument(db, ctx, documentId);
+  const { project, doc } = await withTenant(db, ctx, async (tx) => ({
+    project: await getProject(tx, ctx, id),
+    doc: await getDocument(tx, ctx, documentId),
+  }));
   if (!doc || doc.projectId !== id) notFound();
-  const revisions = await listDocumentRevisions(db, ctx, documentId);
+  const revisions = await withTenant(db, ctx, (tx) => listDocumentRevisions(tx, ctx, documentId));
   const canManage = ctx.capabilities.includes("document.manage");
 
   return (
     <>
-      <AppHeader roleLabel="Project" canCapture={ctx.capabilities.includes("report.create")} />
+      <AppHeader roleLabel="Project" canCapture={ctx.capabilities.includes("report.create")} projectName={project.name} />
       <main id="main-content" className="page-shell">
         <p className="eyebrow">{project.name} · {doc.docNumber ?? doc.category}</p>
         <h1 className="page-title">{doc.title}</h1>

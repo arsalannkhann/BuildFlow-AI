@@ -2,6 +2,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { getDb } from "@buildflow/db/client";
+import { withTenant } from "@buildflow/db/tenant";
 import { getStorage } from "@buildflow/storage/factory";
 import { parseINRToPaise } from "@buildflow/domain/money";
 import { currentContext } from "@/app/session";
@@ -26,33 +27,33 @@ async function projectCtx(projectId: string) {
 export async function createMaterialAction(formData: FormData): Promise<void> {
   const projectId = str(formData, "projectId");
   const { db, ctx } = await projectCtx(projectId);
-  await createMaterial(db, ctx, {
+  await withTenant(db, ctx, (tx) => createMaterial(tx, ctx, {
     name: str(formData, "name"),
     unit: str(formData, "unit"),
     hsnCode: opt(formData, "hsnCode"),
     reorderThreshold: opt(formData, "reorderThreshold"),
-  });
+  }));
   revalidatePath(`/projects/${projectId}/materials`);
 }
 
 export async function updateMaterialAction(formData: FormData): Promise<void> {
   const projectId = str(formData, "projectId");
   const { db, ctx } = await projectCtx(projectId);
-  await updateMaterialDetails(db, ctx, str(formData, "materialId"), {
+  await withTenant(db, ctx, (tx) => updateMaterialDetails(tx, ctx, str(formData, "materialId"), {
     reorderThreshold: opt(formData, "reorderThreshold"),
-  });
+  }));
   revalidatePath(`/projects/${projectId}/materials`);
 }
 
 export async function createSupplierAction(formData: FormData): Promise<void> {
   const projectId = str(formData, "projectId");
   const { db, ctx } = await projectCtx(projectId);
-  await createSupplier(db, ctx, {
+  await withTenant(db, ctx, (tx) => createSupplier(tx, ctx, {
     name: str(formData, "name"),
     gstin: opt(formData, "gstin"),
     phone: opt(formData, "phone"),
     projectId,
-  });
+  }));
   revalidatePath(`/projects/${projectId}/materials`);
 }
 
@@ -60,7 +61,7 @@ export async function createReceiptAction(formData: FormData): Promise<void> {
   const projectId = str(formData, "projectId");
   const { db, ctx } = await projectCtx(projectId);
   const upload = formData.get("photo") as File | null;
-  const receiptId = await createReceipt(db, getStorage(), ctx, {
+  const receiptId = await withTenant(db, ctx, async (tx) => createReceipt(tx, getStorage(), ctx, {
     projectId,
     receiptDate: str(formData, "receiptDate"),
     supplierId: opt(formData, "supplierId"),
@@ -70,7 +71,7 @@ export async function createReceiptAction(formData: FormData): Promise<void> {
       bytes: new Uint8Array(await upload.arrayBuffer()),
       fileName: upload.name, contentType: upload.type || "application/octet-stream",
     } : undefined,
-  });
+  }));
   redirect(`/projects/${projectId}/materials/receipts/${receiptId}`);
 }
 
@@ -78,14 +79,14 @@ export async function addReceiptLineAction(formData: FormData): Promise<void> {
   const projectId = str(formData, "projectId");
   const receiptId = str(formData, "receiptId");
   const { db, ctx } = await projectCtx(projectId);
-  await addManualReceiptLine(db, ctx, {
+  await withTenant(db, ctx, (tx) => addManualReceiptLine(tx, ctx, {
     receiptId,
     descriptionRaw: str(formData, "descriptionRaw"),
     quantity: str(formData, "quantity"),
     unit: str(formData, "unit"),
     materialId: opt(formData, "materialId"),
     ratePaise: optPaise(formData, "rateInr"),
-  });
+  }));
   revalidatePath(`/projects/${projectId}/materials/receipts/${receiptId}`);
 }
 
@@ -93,11 +94,11 @@ export async function editReceiptLineAction(formData: FormData): Promise<void> {
   const projectId = str(formData, "projectId");
   const receiptId = str(formData, "receiptId");
   const { db, ctx } = await projectCtx(projectId);
-  await editReceiptLine(db, ctx, str(formData, "lineId"), {
+  await withTenant(db, ctx, (tx) => editReceiptLine(tx, ctx, str(formData, "lineId"), {
     materialId: opt(formData, "materialId"),
     quantity: str(formData, "quantity") || undefined,
     unit: str(formData, "unit") || undefined,
-  });
+  }));
   revalidatePath(`/projects/${projectId}/materials/receipts/${receiptId}`);
 }
 
@@ -105,7 +106,7 @@ export async function deleteReceiptLineAction(formData: FormData): Promise<void>
   const projectId = str(formData, "projectId");
   const receiptId = str(formData, "receiptId");
   const { db, ctx } = await projectCtx(projectId);
-  await deleteReceiptLine(db, ctx, str(formData, "lineId"));
+  await withTenant(db, ctx, (tx) => deleteReceiptLine(tx, ctx, str(formData, "lineId")));
   revalidatePath(`/projects/${projectId}/materials/receipts/${receiptId}`);
 }
 
@@ -113,7 +114,7 @@ export async function markReceiptReviewedAction(formData: FormData): Promise<voi
   const projectId = str(formData, "projectId");
   const receiptId = str(formData, "receiptId");
   const { db, ctx } = await projectCtx(projectId);
-  await markReceiptReviewed(db, ctx, receiptId);
+  await withTenant(db, ctx, (tx) => markReceiptReviewed(tx, ctx, receiptId));
   revalidatePath(`/projects/${projectId}/materials/receipts/${receiptId}`);
 }
 
@@ -121,7 +122,7 @@ export async function postReceiptAction(formData: FormData): Promise<void> {
   const projectId = str(formData, "projectId");
   const receiptId = str(formData, "receiptId");
   const { db, ctx } = await projectCtx(projectId);
-  await postReceipt(db, ctx, receiptId);
+  await withTenant(db, ctx, (tx) => postReceipt(tx, ctx, receiptId));
   revalidatePath(`/projects/${projectId}/materials/receipts/${receiptId}`);
   revalidatePath(`/projects/${projectId}/materials`);
 }
@@ -129,12 +130,12 @@ export async function postReceiptAction(formData: FormData): Promise<void> {
 export async function recordStockMovementAction(formData: FormData): Promise<void> {
   const projectId = str(formData, "projectId");
   const { db, ctx } = await projectCtx(projectId);
-  await recordStockMovement(db, ctx, {
+  await withTenant(db, ctx, (tx) => recordStockMovement(tx, ctx, {
     projectId,
     materialId: str(formData, "materialId"),
     kind: str(formData, "kind"),
     quantity: str(formData, "quantity"),
     note: opt(formData, "note"),
-  });
+  }));
   revalidatePath(`/projects/${projectId}/materials`);
 }

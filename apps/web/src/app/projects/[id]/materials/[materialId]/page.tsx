@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getDb } from "@buildflow/db/client";
+import { withTenant } from "@buildflow/db/tenant";
 import { currentContext } from "@/app/session";
 import { getProject } from "@buildflow/db/queries/projects";
 import { getMaterial, stockLedger, stockLevels } from "@buildflow/db/queries/materials";
@@ -14,18 +15,21 @@ export default async function StockLedgerPage({ params }: { params: Promise<{ id
   const db = await getDb();
   const base = await currentContext();
   const ctx = { ...base, projectId: id };
-  const project = await getProject(db, ctx, id);
-  const material = await getMaterial(db, ctx, materialId);
+  const { project, material } = await withTenant(db, ctx, async (tx) => {
+    const project = await getProject(tx, ctx, id);
+    const material = await getMaterial(tx, ctx, materialId);
+    return { project, material };
+  });
   if (!material) notFound();
-  const [ledger, levels] = await Promise.all([
-    stockLedger(db, ctx, id, materialId),
-    stockLevels(db, ctx, id),
-  ]);
+  const [ledger, levels] = await withTenant(db, ctx, (tx) => Promise.all([
+    stockLedger(tx, ctx, id, materialId),
+    stockLevels(tx, ctx, id),
+  ]));
   const current = levels.find((l) => l.materialId === materialId)?.currentStock ?? "0";
 
   return (
     <>
-      <AppHeader roleLabel="Project" canCapture={ctx.capabilities.includes("report.create")} />
+      <AppHeader roleLabel="Project" canCapture={ctx.capabilities.includes("report.create")} projectName={project.name} />
       <main id="main-content" className="page-shell">
         <p className="eyebrow">Stock ledger</p>
         <h1 className="page-title">{project.name}</h1>

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getDb } from "@buildflow/db/client";
+import { withTenant } from "@buildflow/db/tenant";
 import { currentContext } from "@/app/session";
 import { AppHeader } from "@/app/components/AppHeader";
 import { ASSISTANT_SAMPLE_QUESTIONS, askAssistant } from "@/core/assistant-core";
@@ -15,7 +16,7 @@ export default async function AssistantPage({ searchParams }: {
   const q = typeof params.q === "string" ? params.q : "";
   const db = await getDb();
   const ctx = await currentContext();
-  const result = q.trim() ? await askAssistant(db, ctx, q) : null;
+  const result = q.trim() ? await withTenant(db, ctx, (tx) => askAssistant(tx, ctx, q)) : null;
 
   return (
     <>

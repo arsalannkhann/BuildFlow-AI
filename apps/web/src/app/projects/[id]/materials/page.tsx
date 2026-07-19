@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getDb } from "@buildflow/db/client";
+import { withTenant } from "@buildflow/db/tenant";
 import { currentContext } from "@/app/session";
 import { getProject } from "@buildflow/db/queries/projects";
 import { listMaterials, listReceipts, listSuppliers, stockLevels } from "@buildflow/db/queries/materials";
@@ -15,14 +16,17 @@ export default async function MaterialsPage({ params }: { params: Promise<{ id: 
   const db = await getDb();
   const base = await currentContext();
   const ctx = { ...base, projectId: id };
-  const project = await getProject(db, ctx, id);
-  const [catalogue, receipts, levels, alerts, projectSuppliers] = await Promise.all([
-    listMaterials(db, ctx),
-    listReceipts(db, ctx, id),
-    stockLevels(db, ctx, id),
-    shortageAlerts(db, ctx, id),
-    listSuppliers(db, ctx),
-  ]);
+  const { project, catalogue, receipts, levels, alerts, projectSuppliers } = await withTenant(db, ctx, async (tx) => {
+    const project = await getProject(tx, ctx, id);
+    const [catalogue, receipts, levels, alerts, projectSuppliers] = await Promise.all([
+      listMaterials(tx, ctx),
+      listReceipts(tx, ctx, id),
+      stockLevels(tx, ctx, id),
+      shortageAlerts(tx, ctx, id),
+      listSuppliers(tx, ctx),
+    ]);
+    return { project, catalogue, receipts, levels, alerts, projectSuppliers };
+  });
   const canManage = ctx.capabilities.includes("material.manage");
   const canReview = ctx.capabilities.includes("material.review");
   const levelOf = new Map(levels.map((l) => [l.materialId, l.currentStock]));
@@ -30,7 +34,7 @@ export default async function MaterialsPage({ params }: { params: Promise<{ id: 
 
   return (
     <>
-      <AppHeader roleLabel="Project" canCapture={ctx.capabilities.includes("report.create")} />
+      <AppHeader roleLabel="Project" canCapture={ctx.capabilities.includes("report.create")} projectName={project.name} />
       <main id="main-content" className="page-shell">
         <p className="eyebrow">Materials</p>
         <h1 className="page-title">{project.name}</h1>

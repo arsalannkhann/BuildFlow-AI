@@ -1,4 +1,5 @@
 import { getDb } from "@buildflow/db/client";
+import { withTenant } from "@buildflow/db/tenant";
 import { getOrganizationExport } from "@buildflow/db/queries/organization";
 import { audit } from "@buildflow/db/queries/audit";
 import { assertCan } from "@buildflow/domain/tenancy";
@@ -12,19 +13,19 @@ export async function GET(request: Request, { params }: { params: Promise<{ expo
     const ctx = await currentContext();
     assertCan(ctx, "org.export");
     const { exportId } = await params;
-    const row = await getOrganizationExport(db, ctx, exportId);
+    const row = await withTenant(db, ctx, (tx) => getOrganizationExport(tx, ctx, exportId));
     if (!row || row.status !== "succeeded" || !row.objectKey) return new Response("Export not found", { status: 404 });
     const storage = getStorage();
     if (storage.createSignedGetUrl) {
       const signed = await storage.createSignedGetUrl(row.objectKey, 5 * 60);
-      await audit(db, ctx, {
+      await withTenant(db, ctx, (tx) => audit(tx, ctx, {
         action: "organization.export_link_created", subjectRef: row.id,
         metadata: { expiresAt: signed.expiresAt.toISOString() },
-      });
+      }));
       return Response.redirect(signed.url, 303);
     }
     const bytes = await storage.get(row.objectKey);
-    await audit(db, ctx, { action: "organization.export_downloaded", subjectRef: row.id, metadata: {} });
+    await withTenant(db, ctx, (tx) => audit(tx, ctx, { action: "organization.export_downloaded", subjectRef: row.id, metadata: {} }));
     const body = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
     return new Response(body, {
       headers: {

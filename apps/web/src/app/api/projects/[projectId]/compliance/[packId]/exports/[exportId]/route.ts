@@ -1,4 +1,5 @@
 import { getDb } from "@buildflow/db/client";
+import { withTenant } from "@buildflow/db/tenant";
 import { resolveTenantContext } from "@buildflow/auth/context";
 import { getStorage } from "@buildflow/storage/factory";
 import { currentContext } from "@/app/session";
@@ -12,7 +13,8 @@ export async function GET(_request: Request, { params }: {
   const base = await currentContext();
   const ctx = await resolveTenantContext(db, base.userId, projectId);
   try {
-    const row = await complianceExportForDownload(db, ctx, projectId, packId, exportId);
+    const row = await withTenant(db, ctx, (tx) =>
+      complianceExportForDownload(tx, ctx, projectId, packId, exportId));
     const bytes = await getStorage().get(row.objectKey);
     const body = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
     return new Response(body, {

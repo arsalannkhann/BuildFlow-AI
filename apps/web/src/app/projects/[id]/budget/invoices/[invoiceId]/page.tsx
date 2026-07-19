@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getDb } from "@buildflow/db/client";
+import { withTenant } from "@buildflow/db/tenant";
 import { currentContext } from "@/app/session";
 import { getProject } from "@buildflow/db/queries/projects";
 import { getInvoice, listInvoiceLines, listPayments } from "@buildflow/db/queries/invoices";
@@ -18,14 +19,17 @@ export default async function InvoiceReviewPage({ params }: { params: Promise<{ 
   const db = await getDb();
   const base = await currentContext();
   const ctx = { ...base, projectId: id };
-  const project = await getProject(db, ctx, id);
-  const invoice = await getInvoice(db, ctx, invoiceId);
+  const { project, invoice } = await withTenant(db, ctx, async (tx) => {
+    const project = await getProject(tx, ctx, id);
+    const invoice = await getInvoice(tx, ctx, invoiceId);
+    return { project, invoice };
+  });
   if (!invoice || invoice.projectId !== id) notFound();
-  const [lines, costCodes, payments] = await Promise.all([
-    listInvoiceLines(db, ctx, invoiceId),
-    listCostCodes(db, ctx),
-    listPayments(db, ctx, id),
-  ]);
+  const [lines, costCodes, payments] = await withTenant(db, ctx, (tx) => Promise.all([
+    listInvoiceLines(tx, ctx, invoiceId),
+    listCostCodes(tx, ctx),
+    listPayments(tx, ctx, id),
+  ]));
   const invoicePayments = payments.filter((p) => p.invoiceId === invoiceId);
   const canReview = ctx.capabilities.includes("invoice.review");
   const canEnter = canReview || ctx.capabilities.includes("material.manage");
@@ -33,7 +37,7 @@ export default async function InvoiceReviewPage({ params }: { params: Promise<{ 
 
   return (
     <>
-      <AppHeader roleLabel="Project" canCapture={ctx.capabilities.includes("report.create")} />
+      <AppHeader roleLabel="Project" canCapture={ctx.capabilities.includes("report.create")} projectName={project.name} />
       <main id="main-content" className="page-shell">
         <p className="eyebrow">Invoice</p>
         <h1 className="page-title">{project.name}</h1>

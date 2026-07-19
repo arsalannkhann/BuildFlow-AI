@@ -2,6 +2,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { getDb } from "@buildflow/db/client";
+import { withTenant } from "@buildflow/db/tenant";
 import { ensureBooted } from "@buildflow/db/boot";
 import { getAuth } from "@buildflow/auth/dev";
 import { currentContext, SESSION_COOKIE } from "@/app/session";
@@ -29,12 +30,12 @@ const opt = (fd: FormData, key: string): string | null => str(fd, key) || null;
 export async function createProjectAction(formData: FormData): Promise<void> {
   const db = await getDb();
   const ctx = await currentContext();
-  const projectId = await createProjectAsAdmin(db, ctx, {
+  const projectId = await withTenant(db, ctx, (tx) => createProjectAsAdmin(tx, ctx, {
     name: str(formData, "name"),
     clientName: opt(formData, "clientName"),
     timezone: str(formData, "timezone") || "Asia/Kolkata",
     address: opt(formData, "address"),
-  });
+  }));
   redirect(`/projects/${projectId}/admin`);
 }
 
@@ -44,7 +45,8 @@ export async function updateProjectAction(formData: FormData): Promise<void> {
   const ctx = await currentContext();
   const lat = opt(formData, "latitude");
   const lng = opt(formData, "longitude");
-  await updateProjectSettings(db, { ...ctx, projectId }, projectId, {
+  const scoped = { ...ctx, projectId };
+  await withTenant(db, scoped, (tx) => updateProjectSettings(tx, scoped, projectId, {
     name: str(formData, "name"),
     clientName: opt(formData, "clientName"),
     timezone: str(formData, "timezone") || "Asia/Kolkata",
@@ -53,7 +55,7 @@ export async function updateProjectAction(formData: FormData): Promise<void> {
     latitude: lat === null ? null : Number(lat),
     longitude: lng === null ? null : Number(lng),
     defaultRecipients: opt(formData, "defaultRecipients")?.split(",").map((s) => s.trim()).filter(Boolean) ?? null,
-  });
+  }));
   revalidatePath(`/projects/${projectId}/admin`);
 }
 
@@ -61,12 +63,13 @@ export async function inviteMemberAction(formData: FormData): Promise<void> {
   const db = await getDb();
   const projectId = opt(formData, "projectId");
   const ctx = await currentContext();
-  const invite = await inviteMember(db, projectId ? { ...ctx, projectId } : ctx, {
+  const scoped = projectId ? { ...ctx, projectId } : ctx;
+  const invite = await withTenant(db, scoped, (tx) => inviteMember(tx, scoped, {
     email: opt(formData, "email") ?? undefined,
     mobile: opt(formData, "mobile") ?? undefined,
     role: parseRole(str(formData, "role")),
     projectId,
-  });
+  }));
   const back = projectId ? `/projects/${projectId}/admin` : "/organization";
   redirect(`${back}?invited=${encodeURIComponent(invite.token)}`);
 }
@@ -74,7 +77,7 @@ export async function inviteMemberAction(formData: FormData): Promise<void> {
 export async function revokeInvitationAction(formData: FormData): Promise<void> {
   const db = await getDb();
   const ctx = await currentContext();
-  await revokeMemberInvitation(db, ctx, str(formData, "invitationId"));
+  await withTenant(db, ctx, (tx) => revokeMemberInvitation(tx, ctx, str(formData, "invitationId")));
   revalidatePath("/organization");
   const projectId = opt(formData, "projectId");
   if (projectId) revalidatePath(`/projects/${projectId}/admin`);
@@ -84,11 +87,12 @@ export async function changeRoleAction(formData: FormData): Promise<void> {
   const db = await getDb();
   const projectId = opt(formData, "projectId");
   const ctx = await currentContext();
-  await changeMemberRole(db, projectId ? { ...ctx, projectId } : ctx, {
+  const scoped = projectId ? { ...ctx, projectId } : ctx;
+  await withTenant(db, scoped, (tx) => changeMemberRole(tx, scoped, {
     userId: str(formData, "userId"),
     projectId,
     role: parseRole(str(formData, "role")),
-  });
+  }));
   if (projectId) revalidatePath(`/projects/${projectId}/admin`);
   revalidatePath("/organization");
 }
@@ -99,8 +103,10 @@ export async function removeMemberAction(formData: FormData): Promise<void> {
   const ctx = await currentContext();
   assertCan(ctx, projectId ? "project.members.manage" : "org.members.manage");
   const membershipId = str(formData, "membershipId");
-  await removeMembership(db, ctx, membershipId);
-  await audit(db, ctx, { action: "member.removed", subjectRef: membershipId, metadata: { projectId } });
+  await withTenant(db, ctx, async (tx) => {
+    await removeMembership(tx, ctx, membershipId);
+    await audit(tx, ctx, { action: "member.removed", subjectRef: membershipId, metadata: { projectId } });
+  });
   if (projectId) revalidatePath(`/projects/${projectId}/admin`);
   revalidatePath("/organization");
 }
@@ -110,10 +116,11 @@ export async function addLocationAction(formData: FormData): Promise<void> {
   const projectId = str(formData, "projectId");
   const ctx = await currentContext();
   assertCan(ctx, "project.manage");
-  await addLocation(db, { ...ctx, projectId }, {
+  const scoped = { ...ctx, projectId };
+  await withTenant(db, scoped, (tx) => addLocation(tx, scoped, {
     projectId, name: str(formData, "name"), kind: str(formData, "kind"),
     parentId: opt(formData, "parentId"),
-  });
+  }));
   revalidatePath(`/projects/${projectId}/admin`);
 }
 
@@ -122,10 +129,11 @@ export async function addActivityAction(formData: FormData): Promise<void> {
   const projectId = str(formData, "projectId");
   const ctx = await currentContext();
   assertCan(ctx, "project.manage");
-  await addActivity(db, { ...ctx, projectId }, {
+  const scoped = { ...ctx, projectId };
+  await withTenant(db, scoped, (tx) => addActivity(tx, scoped, {
     projectId, name: str(formData, "name"), unit: opt(formData, "unit"),
     locationId: opt(formData, "locationId"),
-  });
+  }));
   revalidatePath(`/projects/${projectId}/admin`);
 }
 
@@ -139,8 +147,8 @@ export async function importCsvAction(formData: FormData): Promise<void> {
   const text = await file.text();
   const ctx = await currentContext();
   const scoped = { ...ctx, projectId };
-  if (kind === "locations") await importLocationsCsv(db, scoped, projectId, text);
-  else if (kind === "activities") await importActivitiesCsv(db, scoped, projectId, text);
+  if (kind === "locations") await withTenant(db, scoped, (tx) => importLocationsCsv(tx, scoped, projectId, text));
+  else if (kind === "activities") await withTenant(db, scoped, (tx) => importActivitiesCsv(tx, scoped, projectId, text));
   else throw new Error(`Unknown import kind: ${kind}`);
   revalidatePath(`/projects/${projectId}/admin`);
 }
@@ -184,13 +192,15 @@ export async function updateOrganizationSettingsAction(formData: FormData): Prom
   if (retentionDays !== null && (!Number.isInteger(retentionDays) || retentionDays < 30 || retentionDays > 3_650)) {
     throw new Error("Retention must be between 30 days and 10 years");
   }
-  await updateOrganizationCommercialSettings(db, ctx, {
-    plan: parsePlan(str(formData, "plan")),
-    billingStatus: parseBillingStatus(str(formData, "billingStatus")), retentionDays,
-  });
-  await audit(db, ctx, {
-    action: "organization.settings_updated", subjectRef: ctx.organizationId,
-    metadata: { fields: ["plan", "billingStatus", "retentionDays"] },
+  await withTenant(db, ctx, async (tx) => {
+    await updateOrganizationCommercialSettings(tx, ctx, {
+      plan: parsePlan(str(formData, "plan")),
+      billingStatus: parseBillingStatus(str(formData, "billingStatus")), retentionDays,
+    });
+    await audit(tx, ctx, {
+      action: "organization.settings_updated", subjectRef: ctx.organizationId,
+      metadata: { fields: ["plan", "billingStatus", "retentionDays"] },
+    });
   });
   revalidatePath("/organization");
 }
@@ -198,51 +208,51 @@ export async function updateOrganizationSettingsAction(formData: FormData): Prom
 export async function requestOrganizationExportAction(): Promise<void> {
   const db = await getDb();
   const ctx = await currentContext();
-  await createOrganizationExportRequest(db, ctx);
+  await withTenant(db, ctx, (tx) => createOrganizationExportRequest(tx, ctx));
   revalidatePath("/organization");
 }
 
 export async function requestOrganizationDeletionAction(formData: FormData): Promise<void> {
   const db = await getDb();
   const ctx = await currentContext();
-  const organization = await getOrganizationSettings(db, ctx.organizationId);
+  const organization = await withTenant(db, ctx, (tx) => getOrganizationSettings(tx, ctx.organizationId));
   if (str(formData, "organizationName") !== organization.name) {
     throw new Error("Enter the organization name exactly to request deletion");
   }
-  await requestOrganizationDeletion(db, ctx);
+  await withTenant(db, ctx, (tx) => requestOrganizationDeletion(tx, ctx));
   revalidatePath("/organization");
 }
 
 export async function approveOrganizationDeletionAction(): Promise<void> {
   const db = await getDb();
   const ctx = await currentContext();
-  await approveOrganizationDeletion(db, ctx);
+  await withTenant(db, ctx, (tx) => approveOrganizationDeletion(tx, ctx));
   revalidatePath("/organization");
 }
 
 export async function cancelOrganizationDeletionAction(): Promise<void> {
   const db = await getDb();
   const ctx = await currentContext();
-  await cancelOrganizationDeletion(db, ctx);
+  await withTenant(db, ctx, (tx) => cancelOrganizationDeletion(tx, ctx));
   revalidatePath("/organization");
 }
 
 export async function createOnboardingProjectAction(formData: FormData): Promise<void> {
   const db = await getDb();
   const ctx = await currentContext();
-  await createProjectAsAdmin(db, ctx, {
+  await withTenant(db, ctx, (tx) => createProjectAsAdmin(tx, ctx, {
     name: str(formData, "name"), clientName: opt(formData, "clientName"),
     timezone: str(formData, "timezone") || "Asia/Kolkata", address: opt(formData, "address"),
-  });
+  }));
   redirect("/onboarding?project=created");
 }
 
 export async function inviteOnboardingMemberAction(formData: FormData): Promise<void> {
   const db = await getDb();
   const ctx = await currentContext();
-  const invite = await inviteMember(db, ctx, {
+  const invite = await withTenant(db, ctx, (tx) => inviteMember(tx, ctx, {
     email: opt(formData, "email") ?? undefined,
     role: parseRole(str(formData, "role")), projectId: null,
-  });
+  }));
   redirect(`/onboarding?invited=${encodeURIComponent(invite.token)}`);
 }

@@ -1,4 +1,5 @@
 import { getDb } from "@buildflow/db/client";
+import { withTenant } from "@buildflow/db/tenant";
 import { currentContext } from "@/app/session";
 import { mbRegisterCsv } from "@/core/mb-core";
 
@@ -8,7 +9,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ project
   const { projectId } = await params;
   const db = await getDb();
   const base = await currentContext();
-  const csv = await mbRegisterCsv(db, { ...base, projectId }, projectId);
+  const ctx = { ...base, projectId };
+  const csv = await withTenant(db, ctx, (tx) => mbRegisterCsv(tx, ctx, projectId));
   return new Response(csv, {
     headers: {
       "Content-Type": "text/csv; charset=utf-8",

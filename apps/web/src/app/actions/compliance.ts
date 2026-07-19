@@ -2,6 +2,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { getDb } from "@buildflow/db/client";
+import { withTenant } from "@buildflow/db/tenant";
 import { resolveTenantContext } from "@buildflow/auth/context";
 import { getStorage } from "@buildflow/storage/factory";
 import { currentContext } from "@/app/session";
@@ -23,10 +24,10 @@ async function projectCtx(projectId: string) {
 export async function createCompliancePackAction(formData: FormData): Promise<void> {
   const projectId = str(formData, "projectId");
   const { db, ctx } = await projectCtx(projectId);
-  const packId = await createCompliancePack(db, ctx, {
+  const packId = await withTenant(db, ctx, (tx) => createCompliancePack(tx, ctx, {
     projectId, kind: str(formData, "kind"), title: opt(formData, "title") ?? undefined,
     periodStart: str(formData, "periodStart"), periodEnd: str(formData, "periodEnd"),
-  });
+  }));
   redirect(`/projects/${projectId}/compliance/${packId}`);
 }
 
@@ -34,10 +35,10 @@ export async function addComplianceRequirementAction(formData: FormData): Promis
   const projectId = str(formData, "projectId");
   const packId = str(formData, "packId");
   const { db, ctx } = await projectCtx(projectId);
-  await addCustomComplianceRequirement(db, ctx, {
+  await withTenant(db, ctx, (tx) => addCustomComplianceRequirement(tx, ctx, {
     packId, requirementText: str(formData, "requirementText"),
     ownerName: opt(formData, "ownerName"), dueDate: opt(formData, "dueDate"),
-  });
+  }));
   revalidatePath(`/projects/${projectId}/compliance/${packId}`);
 }
 
@@ -49,9 +50,9 @@ export async function satisfyComplianceRequirementAction(formData: FormData): Pr
   const kind = split < 0 ? selected : selected.slice(0, split);
   const ref = split < 0 ? null : selected.slice(split + 1);
   const { db, ctx } = await projectCtx(projectId);
-  await satisfyComplianceRequirement(db, ctx, {
+  await withTenant(db, ctx, (tx) => satisfyComplianceRequirement(tx, ctx, {
     requirementId: str(formData, "requirementId"), kind, ref, note: opt(formData, "note"),
-  });
+  }));
   revalidatePath(`/projects/${projectId}/compliance/${packId}`);
 }
 
@@ -59,7 +60,7 @@ export async function markComplianceNotApplicableAction(formData: FormData): Pro
   const projectId = str(formData, "projectId");
   const packId = str(formData, "packId");
   const { db, ctx } = await projectCtx(projectId);
-  await markComplianceNotApplicable(db, ctx, str(formData, "requirementId"), str(formData, "note"));
+  await withTenant(db, ctx, (tx) => markComplianceNotApplicable(tx, ctx, str(formData, "requirementId"), str(formData, "note")));
   revalidatePath(`/projects/${projectId}/compliance/${packId}`);
 }
 
@@ -67,7 +68,7 @@ export async function submitCompliancePackAction(formData: FormData): Promise<vo
   const projectId = str(formData, "projectId");
   const packId = str(formData, "packId");
   const { db, ctx } = await projectCtx(projectId);
-  await submitCompliancePack(db, ctx, packId);
+  await withTenant(db, ctx, (tx) => submitCompliancePack(tx, ctx, packId));
   revalidatePath(`/projects/${projectId}/compliance/${packId}`);
   revalidatePath(`/projects/${projectId}/compliance`);
 }
@@ -76,7 +77,7 @@ export async function reviewCompliancePackAction(formData: FormData): Promise<vo
   const projectId = str(formData, "projectId");
   const packId = str(formData, "packId");
   const { db, ctx } = await projectCtx(projectId);
-  await reviewCompliancePack(db, ctx, packId);
+  await withTenant(db, ctx, (tx) => reviewCompliancePack(tx, ctx, packId));
   revalidatePath(`/projects/${projectId}/compliance/${packId}`);
   revalidatePath(`/projects/${projectId}/compliance`);
 }
@@ -85,6 +86,6 @@ export async function exportCompliancePackAction(formData: FormData): Promise<vo
   const projectId = str(formData, "projectId");
   const packId = str(formData, "packId");
   const { db, ctx } = await projectCtx(projectId);
-  const row = await exportCompliancePack(db, ctx, getStorage(), packId);
+  const row = await withTenant(db, ctx, (tx) => exportCompliancePack(tx, ctx, getStorage(), packId));
   redirect(`/api/projects/${projectId}/compliance/${packId}/exports/${row.id}`);
 }

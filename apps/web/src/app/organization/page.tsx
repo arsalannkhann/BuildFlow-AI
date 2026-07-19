@@ -1,4 +1,5 @@
 import { getDb } from "@buildflow/db/client";
+import { withTenant } from "@buildflow/db/tenant";
 import { currentContext } from "@/app/session";
 import { AppHeader } from "@/app/components/AppHeader";
 import { listMembers } from "@buildflow/db/queries/members";
@@ -38,12 +39,15 @@ export default async function OrganizationPage({
   const canManageOrganization = ctx.capabilities.includes("org.manage");
   const canExport = ctx.capabilities.includes("org.export");
   const canReadAudit = ctx.capabilities.includes("org.audit.read");
-  const [members, commercial, exports] = await Promise.all([
-    listMembers(db, ctx), organizationCommercialOverview(db, ctx),
-    canExport ? listOrganizationExports(db, ctx) : Promise.resolve([]),
-  ]);
-  const invitations = canManageMembers ? await listInvitations(db, ctx) : [];
-  const auditRows = canReadAudit ? await listAuditEvents(db, ctx, 50) : [];
+  const { members, commercial, exports, invitations, auditRows } = await withTenant(db, ctx, async (tx) => {
+    const [members, commercial, exports] = await Promise.all([
+      listMembers(tx, ctx), organizationCommercialOverview(tx, ctx),
+      canExport ? listOrganizationExports(tx, ctx) : Promise.resolve([]),
+    ]);
+    const invitations = canManageMembers ? await listInvitations(tx, ctx) : [];
+    const auditRows = canReadAudit ? await listAuditEvents(tx, ctx, 50) : [];
+    return { members, commercial, exports, invitations, auditRows };
+  });
   const invitedToken = typeof params.invited === "string" ? params.invited : null;
   const resetToken = typeof params.resetToken === "string" ? params.resetToken : null;
 

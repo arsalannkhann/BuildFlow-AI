@@ -1,4 +1,5 @@
 import { getDb } from "@buildflow/db/client";
+import { withTenant } from "@buildflow/db/tenant";
 import { currentContext } from "@/app/session";
 import { AppHeader } from "@/app/components/AppHeader";
 import { myPreferenceMatrix } from "@/core/notifications-core";
@@ -17,7 +18,7 @@ export default async function AccountPage({
   const pw = typeof params.pw === "string" ? params.pw : null;
   const db = await getDb();
   const ctx = await currentContext();
-  const matrix = await myPreferenceMatrix(db, ctx);
+  const matrix = await withTenant(db, ctx, (tx) => myPreferenceMatrix(tx, ctx));
   const cells = matrix.flatMap((row) =>
     NOTIFY_CHANNELS.map((channel) => `${row.eventKind}::${channel}`)).join(",");
 

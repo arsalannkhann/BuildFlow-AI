@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getDb } from "@buildflow/db/client";
+import { withTenant } from "@buildflow/db/tenant";
 import { currentContext } from "@/app/session";
 import { getProject } from "@buildflow/db/queries/projects";
 import { listMbEntries } from "@buildflow/db/queries/mb";
@@ -14,19 +15,22 @@ export default async function MbPage({ params }: { params: Promise<{ id: string 
   const db = await getDb();
   const base = await currentContext();
   const ctx = { ...base, projectId: id };
-  const project = await getProject(db, ctx, id);
-  const [entries, activities, locations, contractors] = await Promise.all([
-    listMbEntries(db, ctx, id),
-    listActivities(db, ctx, id),
-    listLocations(db, ctx, id),
-    listContractors(db, ctx, id),
-  ]);
+  const { project, entries, activities, locations, contractors } = await withTenant(db, ctx, async (tx) => {
+    const project = await getProject(tx, ctx, id);
+    const [entries, activities, locations, contractors] = await Promise.all([
+      listMbEntries(tx, ctx, id),
+      listActivities(tx, ctx, id),
+      listLocations(tx, ctx, id),
+      listContractors(tx, ctx, id),
+    ]);
+    return { project, entries, activities, locations, contractors };
+  });
   const canCreate = ctx.capabilities.includes("mb.create");
   const numberOf = new Map(entries.map((e) => [e.id, e.mbNumber]));
 
   return (
     <>
-      <AppHeader roleLabel="Project" canCapture={ctx.capabilities.includes("report.create")} />
+      <AppHeader roleLabel="Project" canCapture={ctx.capabilities.includes("report.create")} projectName={project.name} />
       <main id="main-content" className="page-shell">
         <p className="eyebrow">Measurement Book (e-MB Preview)</p>
         <h1 className="page-title">{project.name}</h1>

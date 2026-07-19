@@ -53,6 +53,14 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=8080
 ENV BUILDFLOW_REPO_ROOT=/app
 RUN pnpm --filter @buildflow/web exec playwright install --with-deps chromium
+# Next keeps a require() for serverExternalPackages in the emitted chunks even behind a
+# dynamic import, and the standalone tree has no pnpm store. Materialise the externals the
+# server can reach so module resolution succeeds; PGlite still only initialises when
+# DATABASE_URL is unset.
+RUN set -eux; \
+    STANDALONE=/app/apps/web/.next/standalone; \
+    mkdir -p "$STANDALONE/node_modules/@electric-sql"; \
+    cp -RL /app/packages/db/node_modules/@electric-sql/pglite "$STANDALONE/node_modules/@electric-sql/pglite"
 WORKDIR /app/apps/web
 # Standalone output ignores `next start`; run the generated server from the workspace so
 # pnpm-linked transitive deps (pg, playwright, google-cloud) still resolve.

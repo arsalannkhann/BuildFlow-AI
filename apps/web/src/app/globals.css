@@ -3550,3 +3550,93 @@ body {
   .app-header, .app-header__mobile nav, .admin-invite-notice,
   .login-choice-panel .role-card { background: rgba(255, 255, 255, 0.96); }
 }
+
+/* ---- Review inbox: filters + action queue (2026-07-20) ---- */
+.manager-summary .metric-card {
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+}
+.manager-summary .metric-card:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+.metric-card--selected {
+  outline: 2px solid var(--brand-700, #1f4e6d);
+  outline-offset: 2px;
+}
+.filter-notice {
+  margin: 0 0 16px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: var(--brand-100, #dceaf2);
+  color: var(--brand-900, #102a43);
+  font-size: 14px;
+}
+.filter-notice a { color: var(--brand-700, #1f4e6d); font-weight: 600; }
+.project-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 20px;
+}
+.project-filter__chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--neutral-200, #e5e7eb);
+  border-radius: 999px;
+  background: var(--surface, #fff);
+  color: var(--neutral-700, #374151);
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 600;
+  transition: background-color var(--dur-fast, 150ms) var(--ease-out, ease),
+              border-color var(--dur-fast, 150ms) var(--ease-out, ease);
+}
+.project-filter__chip:hover { background: var(--neutral-50, #f9fafb); }
+.project-filter__chip--active {
+  background: var(--brand-900, #102a43);
+  border-color: var(--brand-900, #102a43);
+  color: #fff;
+}
+.report-row--action {
+  border-left: 0;
+  box-shadow: inset 0 0 0 1px rgba(138, 95, 0, 0.18), var(--shadow-xs, 0 1px 2px rgba(16,42,67,.05));
+}
+
+/* ---- Project navigation: grouped sections ---- */
+.project-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  align-items: flex-end;
+  margin: 16px 0 24px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--neutral-200, #e5e7eb);
+}
+.project-nav__group { display: grid; gap: 2px; }
+.project-nav__group-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--neutral-500, #6b7280);
+  padding-left: 8px;
+}
+.project-nav__tabs { display: flex; flex-wrap: wrap; gap: 2px; }
+.project-nav__tab {
+  min-height: 40px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 14px;
+}
+.project-nav__tab--active {
+  background: var(--brand-100, #dceaf2);
+  box-shadow: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .manager-summary .metric-card:hover { transform: none; }
+  .project-filter__chip { transition: none; }
+}

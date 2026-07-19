@@ -2,6 +2,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { getDb } from "@buildflow/db/client";
+import { withTenant } from "@buildflow/db/tenant";
 import { getStorage } from "@buildflow/storage/factory";
 import { currentContext } from "@/app/session";
 import {
@@ -44,7 +45,7 @@ const entryInput = (fd: FormData, projectId: string) => ({
 export async function createMbEntryAction(formData: FormData): Promise<void> {
   const projectId = str(formData, "projectId");
   const { db, ctx } = await projectCtx(projectId);
-  const entryId = await createMbEntry(db, ctx, entryInput(formData, projectId));
+  const entryId = await withTenant(db, ctx, (tx) => createMbEntry(tx, ctx, entryInput(formData, projectId)));
   redirect(`/projects/${projectId}/mb/${entryId}`);
 }
 
@@ -52,7 +53,7 @@ export async function editMbEntryAction(formData: FormData): Promise<void> {
   const projectId = str(formData, "projectId");
   const entryId = str(formData, "entryId");
   const { db, ctx } = await projectCtx(projectId);
-  await editMbEntry(db, ctx, entryId, entryInput(formData, projectId));
+  await withTenant(db, ctx, (tx) => editMbEntry(tx, ctx, entryId, entryInput(formData, projectId)));
   revalidatePath(`/projects/${projectId}/mb/${entryId}`);
 }
 
@@ -60,7 +61,7 @@ export async function submitMbEntryAction(formData: FormData): Promise<void> {
   const projectId = str(formData, "projectId");
   const entryId = str(formData, "entryId");
   const { db, ctx } = await projectCtx(projectId);
-  await submitMbEntry(db, ctx, entryId);
+  await withTenant(db, ctx, (tx) => submitMbEntry(tx, ctx, entryId));
   revalidatePath(`/projects/${projectId}/mb/${entryId}`);
 }
 
@@ -68,7 +69,7 @@ export async function verifyMbEntryAction(formData: FormData): Promise<void> {
   const projectId = str(formData, "projectId");
   const entryId = str(formData, "entryId");
   const { db, ctx } = await projectCtx(projectId);
-  await verifyMbEntry(db, ctx, entryId);
+  await withTenant(db, ctx, (tx) => verifyMbEntry(tx, ctx, entryId));
   revalidatePath(`/projects/${projectId}/mb/${entryId}`);
 }
 
@@ -76,7 +77,7 @@ export async function rejectMbEntryAction(formData: FormData): Promise<void> {
   const projectId = str(formData, "projectId");
   const entryId = str(formData, "entryId");
   const { db, ctx } = await projectCtx(projectId);
-  await rejectMbEntry(db, ctx, entryId, str(formData, "reason"));
+  await withTenant(db, ctx, (tx) => rejectMbEntry(tx, ctx, entryId, str(formData, "reason")));
   revalidatePath(`/projects/${projectId}/mb/${entryId}`);
 }
 
@@ -84,7 +85,7 @@ export async function certifyMbEntryAction(formData: FormData): Promise<void> {
   const projectId = str(formData, "projectId");
   const entryId = str(formData, "entryId");
   const { db, ctx } = await projectCtx(projectId);
-  await certifyMbEntry(db, ctx, entryId);
+  await withTenant(db, ctx, (tx) => certifyMbEntry(tx, ctx, entryId));
   revalidatePath(`/projects/${projectId}/mb/${entryId}`);
   revalidatePath(`/projects/${projectId}/mb`);
 }
@@ -93,7 +94,7 @@ export async function correctMbEntryAction(formData: FormData): Promise<void> {
   const projectId = str(formData, "projectId");
   const entryId = str(formData, "entryId");
   const { db, ctx } = await projectCtx(projectId);
-  const correctionId = await correctMbEntry(db, ctx, entryId, entryInput(formData, projectId));
+  const correctionId = await withTenant(db, ctx, (tx) => correctMbEntry(tx, ctx, entryId, entryInput(formData, projectId)));
   redirect(`/projects/${projectId}/mb/${correctionId}`);
 }
 
@@ -104,7 +105,7 @@ export async function addMbEvidenceAction(formData: FormData): Promise<void> {
   const upload = formData.get("photo") as File | null;
   if (!upload || upload.size === 0) throw new Error("Choose a photo");
   const capturedAt = opt(formData, "capturedAt");
-  await addMbEvidencePhoto(db, ctx, getStorage(), {
+  await withTenant(db, ctx, async (tx) => addMbEvidencePhoto(tx, ctx, getStorage(), {
     entryId,
     bytes: new Uint8Array(await upload.arrayBuffer()),
     fileName: upload.name,
@@ -112,6 +113,6 @@ export async function addMbEvidenceAction(formData: FormData): Promise<void> {
     latitude: optFloat(formData, "latitude"),
     longitude: optFloat(formData, "longitude"),
     capturedAt: capturedAt ? new Date(capturedAt) : null,
-  });
+  }));
   revalidatePath(`/projects/${projectId}/mb/${entryId}`);
 }

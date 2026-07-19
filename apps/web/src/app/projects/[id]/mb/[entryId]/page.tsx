@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getDb } from "@buildflow/db/client";
+import { withTenant } from "@buildflow/db/tenant";
 import { currentContext } from "@/app/session";
 import { getProject } from "@buildflow/db/queries/projects";
 import { getMbEntry, listMbEvidence } from "@buildflow/db/queries/mb";
@@ -16,10 +17,12 @@ export default async function MbEntryPage({ params }: { params: Promise<{ id: st
   const db = await getDb();
   const base = await currentContext();
   const ctx = { ...base, projectId: id };
-  const project = await getProject(db, ctx, id);
-  const entry = await getMbEntry(db, ctx, entryId);
+  const { project, entry } = await withTenant(db, ctx, async (tx) => ({
+    project: await getProject(tx, ctx, id),
+    entry: await getMbEntry(tx, ctx, entryId),
+  }));
   if (!entry || entry.projectId !== id) notFound();
-  const evidence = await listMbEvidence(db, ctx, entryId);
+  const evidence = await withTenant(db, ctx, (tx) => listMbEvidence(tx, ctx, entryId));
   const canCreate = ctx.capabilities.includes("mb.create");
   const canVerify = ctx.capabilities.includes("mb.verify");
   const canCertify = ctx.capabilities.includes("mb.certify");
@@ -43,7 +46,7 @@ export default async function MbEntryPage({ params }: { params: Promise<{ id: st
 
   return (
     <>
-      <AppHeader roleLabel="Project" canCapture={ctx.capabilities.includes("report.create")} />
+      <AppHeader roleLabel="Project" canCapture={ctx.capabilities.includes("report.create")} projectName={project.name} />
       <main id="main-content" className="page-shell">
         <p className="eyebrow">Measurement Book (e-MB Preview)</p>
         <h1 className="page-title">{project.name}</h1>

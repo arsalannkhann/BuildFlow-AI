@@ -1,4 +1,6 @@
-# Automatic HTTPS once bronn.dev's A record points at this VM.
-bronn.dev {
+# Automatic HTTPS once the A record for bronn.dev (and www) points at this VM
+# (34.14.159.96). Until DNS moves, the app stays reachable on http://<vm-ip>:3000.
+bronn.dev, www.bronn.dev {
+    encode zstd gzip
     reverse_proxy web:8080
 }

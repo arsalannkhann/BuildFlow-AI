@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { and, eq, isNull, ne, sql } from "drizzle-orm";
 import type { AppDb } from "@buildflow/db/client";
 import { authCredentials, passwordResets, sessions, users } from "@buildflow/db/schema";
+import { withAuthBootstrap } from "@buildflow/db/tenant";
 import { hashPassword, verifyPassword } from "@buildflow/domain/security/password";
 
 const RESET_TTL_MS = 30 * 60 * 1000; // 30 minutes
@@ -29,9 +30,11 @@ const assertStrongPassword = (password: string) => {
 export async function createPasswordReset(
   db: AppDb, email: string,
 ): Promise<{ token: string; userId: string; expiresAt: Date } | null> {
-  const [user] = await db.select().from(users).where(and(
+  // Pre-authentication, like sign-in: without the bootstrap RLS hides the account and the
+  // caller cannot tell "no such user" from "reset silently skipped".
+  const [user] = await withAuthBootstrap(db, (tx) => tx.select().from(users).where(and(
     eq(users.email, email.trim().toLowerCase()), eq(users.isActive, true),
-  ));
+  )));
   if (!user) return null;
   return createPasswordResetForUser(db, user.id);
 }

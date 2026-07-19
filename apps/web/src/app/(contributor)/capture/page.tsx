@@ -1,6 +1,7 @@
 import { AppHeader } from "@/app/components/AppHeader";
 import { CaptureClient } from "./CaptureClient";
 import { getDb } from "@buildflow/db/client";
+import { withTenant } from "@buildflow/db/tenant";
 import { listProjects } from "@buildflow/db/queries/projects";
 import { projectToday } from "@buildflow/domain/date-time";
 import { currentContext } from "@/app/session";
@@ -9,7 +10,7 @@ import { redirect } from "next/navigation";
 export default async function CapturePage() {
   const db = await getDb();
   const ctx = await currentContext();
-  const projects = await listProjects(db, ctx);
+  const projects = await withTenant(db, ctx, (tx) => listProjects(tx, ctx));
   const project = projects.find((item) => item.id === ctx.projectId) ?? projects[0];
   if (!project) redirect(ctx.capabilities.includes("org.manage") ? "/onboarding" : "/reports");
   const reportDate = projectToday(project.timezone);

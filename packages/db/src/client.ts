@@ -1,28 +1,37 @@
 import { join, isAbsolute } from "node:path";
 import { pathToFileURL } from "node:url";
-import { PGlite } from "@electric-sql/pglite";
-import { vector as pgliteVector } from "@electric-sql/pglite/vector";
-import { drizzle as drizzlePglite } from "drizzle-orm/pglite";
-import { migrate as migratePglite } from "drizzle-orm/pglite/migrator";
 import pg from "pg";
+import { sql } from "drizzle-orm";
 import { drizzle as drizzlePg } from "drizzle-orm/node-postgres";
 import { migrate as migratePg } from "drizzle-orm/node-postgres/migrator";
 import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 import { schema } from "./schema";
 import { migrationsDir, workspaceRoot } from "./workspace-root";
 
-// Next's server bundler rewrites the pgvector extension URL into `/_next/static`, while
-// PGlite's Node loader expects a filesystem asset. Point at the package-owned tarball
-// explicitly so dev/e2e and the unbundled test runner use the same deterministic source.
-const nodePgliteVector = {
-  ...pgliteVector,
-  setup: async (pg: Parameters<typeof pgliteVector.setup>[0], options: Parameters<typeof pgliteVector.setup>[1]) => ({
-    ...(await pgliteVector.setup(pg, options)),
-    bundlePath: pathToFileURL(join(
-      workspaceRoot(), "packages/db/node_modules/@electric-sql/pglite/dist/vector.tar.gz",
-    )),
-  }),
-};
+// PGlite is the dev/test driver only. It is loaded through dynamic import so production
+// bundles (DATABASE_URL set) never require the package at all — a real deployment must not
+// carry an embedded test database.
+async function loadPglite() {
+  const [{ PGlite }, { vector: pgliteVector }, { drizzle }, { migrate }] = await Promise.all([
+    import("@electric-sql/pglite"),
+    import("@electric-sql/pglite/vector"),
+    import("drizzle-orm/pglite"),
+    import("drizzle-orm/pglite/migrator"),
+  ]);
+  // Next's server bundler rewrites the pgvector extension URL into `/_next/static`, while
+  // PGlite's Node loader expects a filesystem asset. Point at the package-owned tarball
+  // explicitly so dev/e2e and the unbundled test runner use the same deterministic source.
+  const nodePgliteVector = {
+    ...pgliteVector,
+    setup: async (pgArg: Parameters<typeof pgliteVector.setup>[0], options: Parameters<typeof pgliteVector.setup>[1]) => ({
+      ...(await pgliteVector.setup(pgArg, options)),
+      bundlePath: pathToFileURL(join(
+        workspaceRoot(), "packages/db/node_modules/@electric-sql/pglite/dist/vector.tar.gz",
+      )),
+    }),
+  };
+  return { PGlite, nodePgliteVector, drizzlePglite: drizzle, migratePglite: migrate };
+}
 
 // One query surface over two drivers (ADR-0002): real PostgreSQL when DATABASE_URL is set
 // (Docker locally, managed in production), embedded PGlite otherwise (zero-dependency dev
@@ -37,6 +46,13 @@ export async function createDb(dataDir?: string): Promise<AppDb> {
       connectionString: url,
       max: Number(process.env.DATABASE_POOL_MAX ?? 10),
     });
+    // Session-scoped rather than per-query: every connection this process opens belongs to
+    // the worker, and pg queues this ahead of any caller's query on the same connection.
+    if (dbGlobal.__buildflowDbSystem) {
+      pool.on("connect", (client) => {
+        void client.query("select set_config('app.system', 'on', false)");
+      });
+    }
     const db = drizzlePg(pool, { schema });
     await migratePg(db, { migrationsFolder: migrationsDir() });
     return db as unknown as AppDb;
@@ -45,9 +61,13 @@ export async function createDb(dataDir?: string): Promise<AppDb> {
   const resolved = isAbsolute(configured) ? configured : join(workspaceRoot(), configured);
   // pgvector ships inside PGlite; migration 0009 CREATEs the extension. Real PG images
   // (docker-compose, CI, Supabase) are pgvector-enabled already.
+  const { PGlite, nodePgliteVector, drizzlePglite, migratePglite } = await loadPglite();
   const pglite = new PGlite(resolved, { extensions: { vector: nodePgliteVector } });
   const db = drizzlePglite(pglite, { schema });
   await migratePglite(db, { migrationsFolder: migrationsDir() });
+  if (dbGlobal.__buildflowDbSystem) {
+    await db.execute(sql`select set_config('app.system', 'on', false)`);
+  }
   return db as unknown as AppDb;
 }
 
@@ -57,7 +77,24 @@ export async function createDb(dataDir?: string): Promise<AppDb> {
 // against the same on-disk directory that don't see each other's writes. Caching the
 // in-flight Promise on globalThis keeps a single shared connection across all bundles
 // in the process.
-const dbGlobal = globalThis as unknown as { __buildflowDb?: Promise<AppDb> };
+const dbGlobal = globalThis as unknown as {
+  __buildflowDb?: Promise<AppDb>;
+  __buildflowDbSystem?: boolean;
+};
+
+/**
+ * Marks this process as a trusted system process, so its connections may read and write
+ * across tenants (drizzle/0013_preauth_and_system_rls_paths.sql). Only the worker qualifies:
+ * it leases jobs and runs sweeps for every organization, so its queries have no single
+ * `app.org_id` to bind. Request-serving processes must never call this — they keep using
+ * withTenant() per request.
+ */
+export function enableSystemMode(): void {
+  if (dbGlobal.__buildflowDb) {
+    throw new Error("enableSystemMode() must be called before the first getDb()");
+  }
+  dbGlobal.__buildflowDbSystem = true;
+}
 
 export function getDb(): Promise<AppDb> {
   if (!dbGlobal.__buildflowDb) dbGlobal.__buildflowDb = createDb();
@@ -65,6 +102,7 @@ export function getDb(): Promise<AppDb> {
 }
 
 export async function createTestDb(): Promise<AppDb> {
+  const { PGlite, nodePgliteVector, drizzlePglite, migratePglite } = await loadPglite();
   const pglite = new PGlite({ extensions: { vector: nodePgliteVector } }); // in-memory
   const db = drizzlePglite(pglite, { schema });
   await migratePglite(db, { migrationsFolder: migrationsDir() });

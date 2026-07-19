@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getDb } from "@buildflow/db/client";
+import { withTenant } from "@buildflow/db/tenant";
 import { currentContext } from "@/app/session";
 import { getProject } from "@buildflow/db/queries/projects";
 import { getRfq } from "@buildflow/db/queries/procurement";
@@ -19,22 +20,24 @@ export default async function RfqPage({ params }: { params: Promise<{ id: string
   const db = await getDb();
   const base = await currentContext();
   const ctx = { ...base, projectId: id };
-  const project = await getProject(db, ctx, id);
-  const rfq = await getRfq(db, ctx, rfqId);
+  const { project, rfq } = await withTenant(db, ctx, async (tx) => ({
+    project: await getProject(tx, ctx, id),
+    rfq: await getRfq(tx, ctx, rfqId),
+  }));
   if (!rfq || rfq.projectId !== id) notFound();
-  const [comparison, suppliers, materials, costCodes] = await Promise.all([
-    rfqComparison(db, ctx, rfqId),
-    listSuppliers(db, ctx),
-    listMaterials(db, ctx),
-    listCostCodes(db, ctx),
-  ]);
+  const [comparison, suppliers, materials, costCodes] = await withTenant(db, ctx, (tx) => Promise.all([
+    rfqComparison(tx, ctx, rfqId),
+    listSuppliers(tx, ctx),
+    listMaterials(tx, ctx),
+    listCostCodes(tx, ctx),
+  ]));
   const canManage = ctx.capabilities.includes("procurement.manage");
   const supplierName = new Map(suppliers.map((s) => [s.id, s.name]));
   const quotedSuppliers = [...new Set(comparison.flatMap((c) => c.quotes.map((q) => q.supplierId)))];
 
   return (
     <>
-      <AppHeader roleLabel="Project" canCapture={ctx.capabilities.includes("report.create")} />
+      <AppHeader roleLabel="Project" canCapture={ctx.capabilities.includes("report.create")} projectName={project.name} />
       <main id="main-content" className="page-shell">
         <p className="eyebrow">RFQ</p>
         <h1 className="page-title">{project.name}</h1>

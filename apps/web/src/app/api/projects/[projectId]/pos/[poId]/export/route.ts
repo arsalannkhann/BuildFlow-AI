@@ -1,4 +1,5 @@
 import { getDb } from "@buildflow/db/client";
+import { withTenant } from "@buildflow/db/tenant";
 import { currentContext } from "@/app/session";
 import { markPoExported, poExportCsv, poExportJson } from "@/core/procurement-core";
 
@@ -12,8 +13,11 @@ export async function GET(req: Request, { params }: { params: Promise<{ projectI
   const format = new URL(req.url).searchParams.get("format") ?? "csv";
 
   if (format === "json") {
-    const json = await poExportJson(db, ctx, poId);
-    await markPoExported(db, ctx, poId);
+    const json = await withTenant(db, ctx, async (tx) => {
+      const payload = await poExportJson(tx, ctx, poId);
+      await markPoExported(tx, ctx, poId);
+      return payload;
+    });
     return new Response(JSON.stringify(json, null, 2), {
       headers: {
         "Content-Type": "application/json",
@@ -21,8 +25,11 @@ export async function GET(req: Request, { params }: { params: Promise<{ projectI
       },
     });
   }
-  const csv = await poExportCsv(db, ctx, poId);
-  await markPoExported(db, ctx, poId);
+  const csv = await withTenant(db, ctx, async (tx) => {
+    const payload = await poExportCsv(tx, ctx, poId);
+    await markPoExported(tx, ctx, poId);
+    return payload;
+  });
   return new Response(csv, {
     headers: {
       "Content-Type": "text/csv; charset=utf-8",

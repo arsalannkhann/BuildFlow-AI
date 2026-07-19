@@ -1,6 +1,7 @@
 "use server";
 import { redirect } from "next/navigation";
 import { getDb } from "@buildflow/db/client";
+import { withTenant } from "@buildflow/db/tenant";
 import { ensureBooted } from "@buildflow/db/boot";
 import { getAuth } from "@buildflow/auth/dev";
 import { DEMO_PASSWORD, SEED } from "@buildflow/db/seed";
@@ -52,7 +53,8 @@ export async function loginAction(formData: FormData): Promise<void> {
   });
   const ctx = await resolveTenantContext(db, result.userId);
   if (ctx.capabilities.includes("org.manage")) {
-    const [projects, members] = await Promise.all([listProjects(db, ctx), listMembers(db, ctx)]);
+    const [projects, members] = await withTenant(db, ctx, (tx) =>
+      Promise.all([listProjects(tx, ctx), listMembers(tx, ctx)]));
     if (projects.length === 0 || members.length <= 1) redirect("/onboarding");
   }
   redirect("/reports");
@@ -260,15 +262,15 @@ export async function generateMemberResetLinkAction(formData: FormData): Promise
   const targetUserId = String(formData.get("userId") ?? "");
   const { users } = await import("@buildflow/db/schema");
   const { and, eq } = await import("drizzle-orm");
-  const [target] = await db.select().from(users).where(and(
+  const [target] = await withTenant(db, ctx, (tx) => tx.select().from(users).where(and(
     eq(users.id, targetUserId), eq(users.organizationId, ctx.organizationId),
-  ));
+  )));
   if (!target) redirect("/organization");
   const { createPasswordResetForUser } = await import("@buildflow/auth/reset");
   const reset = await createPasswordResetForUser(db, target.id);
   const { audit } = await import("@buildflow/db/queries/audit");
-  await audit(db, ctx, {
+  await withTenant(db, ctx, (tx) => audit(tx, ctx, {
     action: "member.password_reset_link_generated", subjectRef: target.id, metadata: {},
-  });
+  }));
   redirect(`/organization?resetToken=${encodeURIComponent(reset.token)}`);
 }

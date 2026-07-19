@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getDb } from "@buildflow/db/client";
+import { withTenant } from "@buildflow/db/tenant";
 import { listProjects } from "@buildflow/db/queries/projects";
 import { listMembers } from "@buildflow/db/queries/members";
 import { getOrganizationSettings } from "@buildflow/db/queries/organization";
@@ -15,9 +16,9 @@ export default async function OnboardingPage({
   const params = (await searchParams) ?? {};
   const db = await getDb();
   const ctx = await currentContext();
-  const [organization, projects, members] = await Promise.all([
-    getOrganizationSettings(db, ctx.organizationId), listProjects(db, ctx), listMembers(db, ctx),
-  ]);
+  const [organization, projects, members] = await withTenant(db, ctx, (tx) => Promise.all([
+    getOrganizationSettings(tx, ctx.organizationId), listProjects(tx, ctx), listMembers(tx, ctx),
+  ]));
   const canManage = ctx.capabilities.includes("org.manage");
   const canInvite = ctx.capabilities.includes("org.members.manage");
   const token = typeof params.invited === "string" ? params.invited : null;

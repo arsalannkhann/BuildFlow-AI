@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getDb } from "@buildflow/db/client";
 import { ensureBooted } from "@buildflow/db/boot";
+import { withTenant } from "@buildflow/db/tenant";
 import { resolveClientLink } from "@buildflow/db/queries/client-links";
 import { audit } from "@buildflow/db/queries/audit";
 import { consumeRateLimit } from "@buildflow/db/queries/rate-limits";
@@ -33,14 +34,16 @@ export default async function ClientReportPage({ params }: { params: Promise<{ t
     );
   }
 
-  await audit(db, {
+  const linkCtx = {
     organizationId: resolved.link.organizationId,
     userId: `client-link:${resolved.link.id}`, capabilities: [],
-  }, { action: "client_link.accessed", subjectRef: resolved.report.id, metadata: { linkId: resolved.link.id } });
-
-  const project = await getProject(db, {
-    organizationId: resolved.link.organizationId, userId: `client-link:${resolved.link.id}`, capabilities: [],
-  }, resolved.report.projectId);
+  };
+  const project = await withTenant(db, linkCtx, async (tx) => {
+    await audit(tx, linkCtx, {
+      action: "client_link.accessed", subjectRef: resolved.report.id, metadata: { linkId: resolved.link.id },
+    });
+    return getProject(tx, linkCtx, resolved.report.projectId);
+  });
   const issuedDate = formatProjectDate(resolved.report.reportDate, { timeZone: project.timezone });
 
   return (
