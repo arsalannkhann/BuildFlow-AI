@@ -34,10 +34,10 @@ export async function tracedRoute(
       });
       return response;
     } catch (error) {
+      console.error("[Full Error] request.failed:", error);
       logEvent("error", "request.failed", {
         traceId, route, method: request.method, status: 500,
         durationMs: Math.round(performance.now() - started), errorCategory: errorCategory(error),
-        error: error instanceof Error ? error.stack : String(error),
       });
       return NextResponse.json(
         { type: "about:blank", title: "Internal server error", status: 500, traceId },
