@@ -1,4 +1,5 @@
 import { LocalFsEmail, LocalFsWhatsApp } from "./local-fs";
+import { ResendEmail } from "./resend";
 import type { NotifyRegistry } from "./ports";
 
 // Provider selection mirrors AI_PROVIDER handling (rules.md §15): "local" is always
@@ -7,11 +8,14 @@ import type { NotifyRegistry } from "./ports";
 export function getNotifyRegistry(): NotifyRegistry {
   const email = process.env.NOTIFY_EMAIL_PROVIDER ?? "local";
   const whatsapp = process.env.NOTIFY_WHATSAPP_PROVIDER ?? "local";
-  if (email !== "local") {
-    throw new Error(`Unknown NOTIFY_EMAIL_PROVIDER: ${email} (expected "local")`);
+  if (email !== "local" && email !== "resend") {
+    throw new Error(`Unknown NOTIFY_EMAIL_PROVIDER: ${email} (expected "local" or "resend")`);
   }
   if (whatsapp !== "local") {
     throw new Error(`Unknown NOTIFY_WHATSAPP_PROVIDER: ${whatsapp} (expected "local")`);
   }
-  return { email: new LocalFsEmail(), whatsapp: new LocalFsWhatsApp() };
+  return {
+    email: email === "resend" ? new ResendEmail() : new LocalFsEmail(),
+    whatsapp: new LocalFsWhatsApp(),
+  };
 }

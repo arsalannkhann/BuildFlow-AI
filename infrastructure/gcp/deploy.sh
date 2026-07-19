@@ -90,7 +90,7 @@ gcloud run worker-pools deploy "${WORKER_POOL}" \
   --service-account="${WORKER_SERVICE_ACCOUNT}" \
   --set-cloudsql-instances="${CONNECTION_NAME}" \
   --env-vars-file=infrastructure/gcp/worker.env.yaml \
-  --set-secrets=DATABASE_URL=DATABASE_URL:latest,DELETION_RECEIPT_HMAC_KEY=DELETION_RECEIPT_HMAC_KEY:latest \
+  --set-secrets=DATABASE_URL=DATABASE_URL:latest,DELETION_RECEIPT_HMAC_KEY=DELETION_RECEIPT_HMAC_KEY:latest,RESEND_API_KEY=RESEND_API_KEY:latest \
   --cpu=1 \
   --memory=1Gi \
   --instances=1 \
@@ -105,7 +105,7 @@ gcloud run deploy "${WEB_SERVICE}" \
   --service-account="${WEB_SERVICE_ACCOUNT}" \
   --set-cloudsql-instances="${CONNECTION_NAME}" \
   --env-vars-file=infrastructure/gcp/web.env.yaml \
-  --set-secrets=DATABASE_URL=DATABASE_URL:latest,SESSION_PEPPER=SESSION_PEPPER:latest,DELETION_RECEIPT_HMAC_KEY=DELETION_RECEIPT_HMAC_KEY:latest \
+  --set-secrets=DATABASE_URL=DATABASE_URL:latest,SESSION_PEPPER=SESSION_PEPPER:latest,DELETION_RECEIPT_HMAC_KEY=DELETION_RECEIPT_HMAC_KEY:latest,RESEND_API_KEY=RESEND_API_KEY:latest \
   --execution-environment=gen2 \
   --port=8080 \
   --cpu=1 \
