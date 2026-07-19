@@ -9,6 +9,8 @@ services:
   web:
     build: { context: ., target: web-vm }
     env_file: /etc/buildflow/production.env
+    environment:
+      BUILDFLOW_REPO_ROOT: /app   # container path; the host value in the env file is wrong here
     restart: always
     depends_on: [sql-proxy]
     ports: ["3000:8080"]   # direct check port; public traffic enters via caddy
@@ -16,6 +18,8 @@ services:
   worker:
     build: { context: ., target: worker }
     env_file: /etc/buildflow/production.env
+    environment:
+      BUILDFLOW_REPO_ROOT: /app
     restart: always
     depends_on: [sql-proxy]
 

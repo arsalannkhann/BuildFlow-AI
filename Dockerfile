@@ -53,4 +53,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=8080
 ENV BUILDFLOW_REPO_ROOT=/app
 RUN pnpm --filter @buildflow/web exec playwright install --with-deps chromium
-CMD ["pnpm", "--filter", "@buildflow/web", "start"]
+WORKDIR /app/apps/web
+# Standalone output ignores `next start`; run the generated server from the workspace so
+# pnpm-linked transitive deps (pg, playwright, google-cloud) still resolve.
+CMD ["node", ".next/standalone/apps/web/server.js"]
