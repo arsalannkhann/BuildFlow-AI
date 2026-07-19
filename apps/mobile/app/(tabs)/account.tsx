@@ -4,7 +4,7 @@
 import Constants from "expo-constants";
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useI18n, type Language } from "../../src/lib/i18n";
 import { useSession } from "../../src/state/session";
 import { useSync } from "../../src/state/sync";
@@ -109,6 +109,18 @@ export default function AccountScreen() {
         <BodyText strong>{appVersion}</BodyText>
       </Card>
 
+      <Card style={styles.aboutCard}>
+        <Image
+          accessibilityIgnoresInvertColors
+          accessibilityLabel="Tenvor"
+          source={require("../../assets/wordmark.png")}
+          style={styles.aboutWordmark}
+          resizeMode="contain"
+        />
+        <BodyText strong>{t("account.builtBy")}</BodyText>
+        <SupportingText>{t("account.builtByDetail")}</SupportingText>
+      </Card>
+
       <SecondaryButton label={t("account.signOut")} onPress={confirmSignOut} />
 
       <Card style={styles.dangerCard}>
@@ -143,6 +155,8 @@ const styles = StyleSheet.create({
   languageOptionSelected: { backgroundColor: colors.brand100, borderColor: colors.brand700 },
   languageLabel: { fontSize: 16, color: colors.neutral700 },
   languageLabelSelected: { color: colors.brand700, fontWeight: "600" },
+  aboutCard: { alignItems: "center", gap: spacing(2) },
+  aboutWordmark: { width: 160, height: 56 },
   dangerCard: { borderColor: colors.danger100 },
   dangerTitle: { fontSize: 18, lineHeight: 26, color: colors.danger700 },
 });

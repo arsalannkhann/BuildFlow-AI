@@ -3,6 +3,7 @@
 import { Redirect } from "expo-router";
 import { useState } from "react";
 import {
+  Image,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -65,6 +66,12 @@ export default function SignInScreen() {
       >
         <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
           <View style={styles.brandBlock}>
+            <Image
+              accessibilityIgnoresInvertColors
+              source={require("../assets/icon.png")}
+              style={styles.mark}
+              resizeMode="contain"
+            />
             <Text accessibilityRole="header" style={styles.appName}>
               {t("app.name")}
             </Text>
@@ -121,6 +128,16 @@ export default function SignInScreen() {
               onPress={() => void submit()}
             />
           </View>
+          <View style={styles.creditBlock}>
+            <Image
+              accessibilityIgnoresInvertColors
+              accessibilityLabel="Tenvor"
+              source={require("../assets/wordmark.png")}
+              style={styles.wordmark}
+              resizeMode="contain"
+            />
+            <Text style={styles.credit}>{t("app.credit")}</Text>
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -131,7 +148,21 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.brand900 },
   flex: { flex: 1 },
   container: { flexGrow: 1, justifyContent: "center", padding: spacing(6), gap: spacing(8) },
-  brandBlock: { gap: spacing(2) },
+  brandBlock: { gap: spacing(2), alignItems: "flex-start" },
+  mark: { width: 88, height: 88, marginBottom: spacing(1) },
+  creditBlock: {
+    marginTop: spacing(8),
+    alignItems: "center",
+    gap: spacing(2),
+    opacity: 0.9,
+  },
+  wordmark: { width: 132, height: 46, tintColor: colors.surface },
+  credit: {
+    color: colors.brand100,
+    fontSize: 12,
+    lineHeight: 16,
+    textAlign: "center",
+  },
   appName: {
     color: colors.surface,
     fontSize: 32,

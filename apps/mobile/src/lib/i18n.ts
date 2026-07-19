@@ -17,6 +17,7 @@ const en = {
   "common.offline": "Offline — your work is safe on this device.",
   "common.online": "Connected",
 
+  "app.credit": "Built by Arsalan Khan · Tenvor",
   "signIn.title": "Sign in",
   "signIn.subtitle": "Daily site reports, even without network.",
   "signIn.email": "Email",
@@ -107,6 +108,8 @@ const en = {
   "account.signOutConfirmBody":
     "Anything not yet uploaded stays safely on this device and resumes after you sign in.",
   "account.version": "App version",
+  "account.builtBy": "Built by Arsalan Khan",
+  "account.builtByDetail": "BuildFlow AI — a Tenvor product. Designed and engineered for Indian construction sites.",
   "account.signedInAs": "Signed in as",
   "account.dangerZone": "Danger",
   "account.clearSynced": "Clear synced local data",
@@ -129,6 +132,7 @@ const hi: Record<MessageKey, string> = {
   "common.offline": "ऑफ़लाइन — आपका काम इस डिवाइस पर सुरक्षित है।",
   "common.online": "कनेक्टेड",
 
+  "app.credit": "अरसलान खान द्वारा निर्मित · Tenvor",
   "signIn.title": "साइन इन करें",
   "signIn.subtitle": "बिना नेटवर्क के भी दैनिक साइट रिपोर्ट।",
   "signIn.email": "ईमेल",
@@ -220,6 +224,8 @@ const hi: Record<MessageKey, string> = {
   "account.signOutConfirmBody":
     "जो अभी अपलोड नहीं हुआ है वह इस डिवाइस पर सुरक्षित रहेगा और साइन इन करने पर फिर से सिंक होगा।",
   "account.version": "ऐप संस्करण",
+  "account.builtBy": "अरसलान खान द्वारा निर्मित",
+  "account.builtByDetail": "BuildFlow AI — एक Tenvor उत्पाद। भारतीय निर्माण साइटों के लिए बनाया गया।",
   "account.signedInAs": "साइन इन खाता",
   "account.dangerZone": "सावधानी",
   "account.clearSynced": "सिंक हो चुका लोकल डेटा हटाएँ",
