@@ -43,3 +43,14 @@ FROM workspace AS worker
 ENV NODE_ENV=production
 ENV BUILDFLOW_REPO_ROOT=/app
 CMD ["pnpm", "--filter", "@buildflow/worker", "start"]
+
+# VM production web: run Next from the full installed workspace (pnpm-native resolution —
+# no hand-copied module layout) with Chromium for issued-PDF rendering. Heavier than the
+# traced `web` target; correctness over size on our own VM.
+FROM web-builder AS web-vm
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV PORT=8080
+ENV BUILDFLOW_REPO_ROOT=/app
+RUN pnpm --filter @buildflow/web exec playwright install --with-deps chromium
+CMD ["pnpm", "--filter", "@buildflow/web", "start"]

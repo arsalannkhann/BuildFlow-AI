@@ -7,7 +7,7 @@ services:
     restart: always
 
   web:
-    build: { context: ., target: web }
+    build: { context: ., target: web-vm }
     env_file: /etc/buildflow/production.env
     restart: always
     depends_on: [sql-proxy]
