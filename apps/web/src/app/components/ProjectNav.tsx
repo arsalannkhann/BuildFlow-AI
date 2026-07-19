@@ -9,6 +9,7 @@ const TABS = [
   { slug: "materials", label: "Materials" },
   { slug: "labour", label: "Labour" },
   { slug: "equipment", label: "Equipment" },
+  { slug: "mb", label: "Measurement Book (e-MB Preview)" },
   { slug: "budget", label: "Budget" },
   { slug: "admin", label: "Settings" },
 ] as const;

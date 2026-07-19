@@ -45,6 +45,16 @@ export function parseCsv(text: string): CsvTable {
   return { header: trimmedHeader, rows: body.map((r) => r.map((c) => c.trim())) };
 }
 
+const escapeCsvField = (value: string): string =>
+  /[",\n\r]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+
+/** Builds RFC 4180 CSV text (CRLF line endings) for exports (MB register, RA bill, PO). */
+export function toCsv(header: string[], rows: (string | number | null | undefined)[][]): string {
+  const line = (cells: (string | number | null | undefined)[]) =>
+    cells.map((c) => escapeCsvField(String(c ?? ""))).join(",");
+  return [line(header), ...rows.map(line)].join("\r\n") + "\r\n";
+}
+
 /** Maps rows to objects keyed by header; requires the listed columns to exist. */
 export function csvRecords(
   table: CsvTable, requiredColumns: string[],
