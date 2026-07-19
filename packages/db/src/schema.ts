@@ -35,6 +35,16 @@ export const authCredentials = pgTable("auth_credential", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+// Password reset tokens: the emailed/shared link holds the raw token; only its SHA-256
+// hash is stored. Single-use, short-lived; consuming one invalidates the user's sessions.
+export const passwordResets = pgTable("password_reset", {
+  id: text("id").primaryKey(), // sha256(token)
+  userId: text("user_id").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  usedAt: timestamp("used_at", { withTimezone: true }),
+  createdAt: ts(),
+});
+
 // Server-side sessions: the cookie holds an opaque token; we store only its SHA-256 hash.
 export const sessions = pgTable("session", {
   id: text("id").primaryKey(), // sha256(token)
@@ -1011,7 +1021,7 @@ export const auditEvents = pgTable("audit_event", {
 });
 
 export const schema = {
-  organizations, users, authCredentials, sessions, projects, memberships, jobs, rateLimitBuckets,
+  organizations, users, authCredentials, passwordResets, sessions, projects, memberships, jobs, rateLimitBuckets,
   locations, activities, invitations, clientLinks,
   scheduleItems, scheduleDependencies, progressUpdates, blockers, rfis, rfiResponses,
   documents, documentRevisions, reportActivityLinks,

@@ -3,13 +3,18 @@ import { currentContext } from "@/app/session";
 import { AppHeader } from "@/app/components/AppHeader";
 import { myPreferenceMatrix } from "@/core/notifications-core";
 import { savePreferencesAction } from "@/app/actions/notifications";
+import { changePasswordAction } from "@/app/actions/auth";
 import { NOTIFY_CHANNELS } from "@buildflow/notify/catalog";
 
 const CHANNEL_LABELS: Record<string, string> = {
   inapp: "In-app", email: "Email", whatsapp: "WhatsApp",
 };
 
-export default async function AccountPage() {
+export default async function AccountPage({
+  searchParams,
+}: { searchParams?: Promise<Record<string, string | string[] | undefined>> }) {
+  const params = (await searchParams) ?? {};
+  const pw = typeof params.pw === "string" ? params.pw : null;
   const db = await getDb();
   const ctx = await currentContext();
   const matrix = await myPreferenceMatrix(db, ctx);
@@ -58,6 +63,32 @@ export default async function AccountPage() {
               </tbody>
             </table>
             <button className="primary-button" type="submit">Save preferences</button>
+          </form>
+        </section>
+        <section className="surface-card admin-section" aria-labelledby="pw-change">
+          <h2 id="pw-change">Change password</h2>
+          {pw ? (
+            <p role={pw === "changed" ? "status" : "alert"}
+              className={pw === "changed" ? "login-intro" : "login-error"}>
+              {pw === "changed" ? "Password updated. Other signed-in devices were signed out."
+                : pw === "wrong" ? "Current password is incorrect."
+                : pw === "weak" ? "New password must be at least 12 characters."
+                : "The two new passwords don't match."}
+            </p>
+          ) : null}
+          <form action={changePasswordAction} className="admin-form">
+            <label>Current password
+              <input name="currentPassword" type="password" required autoComplete="current-password" />
+            </label>
+            <div className="admin-form-row">
+              <label>New password
+                <input name="newPassword" type="password" required minLength={12} autoComplete="new-password" />
+              </label>
+              <label>Confirm new password
+                <input name="confirm" type="password" required minLength={12} autoComplete="new-password" />
+              </label>
+            </div>
+            <button className="primary-button" type="submit">Change password</button>
           </form>
         </section>
       </main>

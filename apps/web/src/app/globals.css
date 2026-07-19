@@ -3323,3 +3323,9 @@ textarea::placeholder { color: var(--neutral-500); opacity: 1; }
     display: block;
   }
 }
+
+.login-footnote-link {
+  margin-top: 8px;
+  font-size: 14px;
+}
+.login-footnote-link a { font-weight: 600; }

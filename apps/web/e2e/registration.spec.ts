@@ -10,7 +10,7 @@ test("owner creates an organization, first project, and teammate invitation", as
   expect(a11y.violations).toEqual([]);
   await page.getByLabel("Organization name").fill(`Northstar Infra ${suffix}`);
   await page.getByLabel("Your name").fill("Asha Verma");
-  await page.getByLabel("Work email").fill(`owner+${suffix}@example.com`);
+  await page.getByLabel("Email").fill(`owner+${suffix}@example.com`);
   await page.getByLabel("Password").fill("release-demo-password");
   await page.getByRole("button", { name: "Create organization" }).click();
   await expect(page).toHaveURL(/\/onboarding/, { timeout: 30_000 });

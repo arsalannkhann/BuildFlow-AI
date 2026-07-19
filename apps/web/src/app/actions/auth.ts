@@ -103,3 +103,162 @@ export async function registerOrganizationAction(formData: FormData): Promise<vo
   });
   redirect("/onboarding");
 }
+
+// --- Password reset and change (self-serve + admin-generated links) ---
+
+export type SignupFormState = {
+  error: string | null;
+  organizationName: string;
+  ownerName: string;
+  email: string;
+};
+
+// useActionState variant of registration: returns WHICH rule failed and preserves the
+// typed values (never the password) instead of wiping the form (design.md §14).
+export async function registerOrganizationFormAction(
+  _prev: SignupFormState, formData: FormData,
+): Promise<SignupFormState> {
+  const values = {
+    organizationName: String(formData.get("organizationName") ?? "").trim(),
+    ownerName: String(formData.get("ownerName") ?? "").trim(),
+    email: String(formData.get("email") ?? "").trim(),
+  };
+  if (process.env.SIGNUPS_ENABLED !== "1") redirect("/login");
+  await ensureBooted();
+  const db = await getDb();
+  const requestHeaders = await headers();
+  const ip = requestHeaders.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const limit = await consumeRateLimit(db, {
+    scope: "organization-registration", key: ip, limit: 5, windowMs: 60 * 60_000,
+  });
+  if (!limit.allowed) return { ...values, error: "limited" };
+
+  const password = String(formData.get("password") ?? "");
+  let registered: Awaited<ReturnType<typeof registerOrganizationOwner>>;
+  try {
+    registered = await registerOrganizationOwner(db, { ...values, password });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    const code = /conflict|unique|duplicate/i.test(message) ? "conflict"
+      : /organization name/i.test(message) ? "org_name"
+      : /owner name/i.test(message) ? "owner_name"
+      : /valid email/i.test(message) ? "email"
+      : /12 characters/i.test(message) ? "password"
+      : "invalid";
+    return { ...values, error: code };
+  }
+  const result = await getAuth().signInWithPassword(db, registered.email, password);
+  if (!result) redirect("/login?registered=1"); // account exists; sign in normally
+  const { cookies } = await import("next/headers");
+  (await cookies()).set(SESSION_COOKIE, result.token, {
+    httpOnly: true, sameSite: "lax", path: "/", secure: process.env.NODE_ENV === "production",
+    expires: result.expiresAt,
+  });
+  redirect("/onboarding");
+}
+
+export async function requestPasswordResetAction(formData: FormData): Promise<void> {
+  await ensureBooted();
+  const db = await getDb();
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  const requestHeaders = await headers();
+  const ip = requestHeaders.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  // The response is identical in every branch (enumeration-safe); throttled requests
+  // simply skip the send.
+  const [byIp, byEmail] = await Promise.all([
+    consumeRateLimit(db, { scope: "password-reset-ip", key: ip, limit: 5, windowMs: 60 * 60_000 }),
+    consumeRateLimit(db, { scope: "password-reset-email", key: email || "empty", limit: 3, windowMs: 60 * 60_000 }),
+  ]);
+  if (email && byIp.allowed && byEmail.allowed) {
+    const { createPasswordReset } = await import("@buildflow/auth/reset");
+    const reset = await createPasswordReset(db, email);
+    if (reset) {
+      const proto = requestHeaders.get("x-forwarded-proto") ?? "http";
+      const host = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host") ?? "localhost:3000";
+      try {
+        const { getNotifyRegistry } = await import("@buildflow/notify/registry");
+        await getNotifyRegistry().email.send({
+          to: email,
+          subject: "Reset your BuildFlow password",
+          text: [
+            "Someone requested a password reset for your BuildFlow account.",
+            "",
+            `Reset link (valid for 30 minutes, single use): ${proto}://${host}/reset/${reset.token}`,
+            "",
+            "If you did not request this, you can ignore this email; your password is unchanged.",
+          ].join("\n"),
+        });
+      } catch {
+        console.error("password-reset email dispatch failed"); // no address/token in logs
+      }
+    }
+  }
+  redirect("/forgot?sent=1");
+}
+
+export async function resetPasswordAction(formData: FormData): Promise<void> {
+  await ensureBooted();
+  const db = await getDb();
+  const token = String(formData.get("token") ?? "");
+  const password = String(formData.get("password") ?? "");
+  const confirm = String(formData.get("confirm") ?? "");
+  const back = `/reset/${encodeURIComponent(token)}`;
+  if (!token) redirect("/forgot");
+  if (password !== confirm) redirect(`${back}?error=mismatch`);
+  try {
+    const { consumePasswordReset } = await import("@buildflow/auth/reset");
+    await consumePasswordReset(db, token, password);
+  } catch (error) {
+    const { ResetError } = await import("@buildflow/auth/reset");
+    if (error instanceof ResetError && error.code === "weak_password") redirect(`${back}?error=weak`);
+    redirect(`${back}?error=invalid`);
+  }
+  redirect("/login?reset=1");
+}
+
+export async function changePasswordAction(formData: FormData): Promise<void> {
+  await ensureBooted();
+  const db = await getDb();
+  const { currentContext } = await import("@/app/session");
+  const ctx = await currentContext();
+  const current = String(formData.get("currentPassword") ?? "");
+  const next = String(formData.get("newPassword") ?? "");
+  const confirm = String(formData.get("confirm") ?? "");
+  if (next !== confirm) redirect("/account?pw=mismatch");
+  const { cookies } = await import("next/headers");
+  const sessionToken = (await cookies()).get(SESSION_COOKIE)?.value;
+  try {
+    const { changePassword } = await import("@buildflow/auth/reset");
+    await changePassword(db, ctx.userId, current, next, sessionToken);
+  } catch (error) {
+    const { ResetError } = await import("@buildflow/auth/reset");
+    if (error instanceof ResetError && error.code === "weak_password") redirect("/account?pw=weak");
+    redirect("/account?pw=wrong");
+  }
+  redirect("/account?pw=changed");
+}
+
+// Admin path for locked-out members: a member-manager generates a single-use reset link
+// and hands it over on any channel. Same token mechanics as self-serve.
+export async function generateMemberResetLinkAction(formData: FormData): Promise<void> {
+  await ensureBooted();
+  const db = await getDb();
+  const { currentContext } = await import("@/app/session");
+  const ctx = await currentContext();
+  const { assertCan } = await import("@buildflow/domain/tenancy");
+  assertCan(ctx, "org.members.manage");
+  const targetUserId = String(formData.get("userId") ?? "");
+  const { users } = await import("@buildflow/db/schema");
+  const { and, eq } = await import("drizzle-orm");
+  const [target] = await db.select().from(users).where(and(
+    eq(users.id, targetUserId), eq(users.organizationId, ctx.organizationId),
+  ));
+  if (!target) redirect("/organization");
+  const { createPasswordResetForUser } = await import("@buildflow/auth/reset");
+  const reset = await createPasswordResetForUser(db, target.id);
+  const { audit } = await import("@buildflow/db/queries/audit");
+  await audit(db, ctx, {
+    action: "member.password_reset_link_generated", subjectRef: target.id, metadata: {},
+  });
+  redirect(`/organization?resetToken=${encodeURIComponent(reset.token)}`);
+}
