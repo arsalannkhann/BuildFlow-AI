@@ -2,6 +2,7 @@ import type { TenantContext } from "@buildflow/domain/tenancy";
 import type { JobRegistry } from "@buildflow/jobs/types";
 import { runProcessing } from "./run";
 import { runChallanExtraction } from "./extract-documents";
+import { runInvoiceExtraction } from "./extract-invoice";
 
 export const REPORT_PROCESS_JOB = "report.process";
 export const DOCUMENT_EXTRACT_JOB = "document.extract";
@@ -27,6 +28,8 @@ export const pipelineJobRegistry: JobRegistry = {
     const ctx = systemCtx(payload, meta.organizationId);
     if (kind === "challan") {
       await runChallanExtraction(db, ctx, String(payload.receiptId));
+    } else if (kind === "invoice") {
+      await runInvoiceExtraction(db, ctx, String(payload.invoiceId));
     } else {
       throw new Error(`Unknown documentKind: ${kind}`);
     }
