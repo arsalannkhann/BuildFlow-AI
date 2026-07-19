@@ -83,7 +83,7 @@ gcloud run jobs execute "${MIGRATION_JOB}" \
   --quiet
 
 printf 'Deploying worker pool from %s...\n' "${WORKER_IMAGE}"
-gcloud beta run worker-pools deploy "${WORKER_POOL}" \
+gcloud run worker-pools deploy "${WORKER_POOL}" \
   --project="${GCP_PROJECT_ID}" \
   --region="${GCP_REGION}" \
   --image="${WORKER_IMAGE}" \
@@ -93,7 +93,7 @@ gcloud beta run worker-pools deploy "${WORKER_POOL}" \
   --set-secrets=DATABASE_URL=DATABASE_URL:latest,DELETION_RECEIPT_HMAC_KEY=DELETION_RECEIPT_HMAC_KEY:latest \
   --cpu=1 \
   --memory=1Gi \
-  --scaling=1 \
+  --instances=1 \
   --labels="${RELEASE_LABELS}" \
   --quiet
 
@@ -128,7 +128,7 @@ web_revision="$(gcloud run services describe "${WEB_SERVICE}" \
   --project="${GCP_PROJECT_ID}" \
   --region="${GCP_REGION}" \
   --format='value(status.latestReadyRevisionName)')"
-worker_revision="$(gcloud beta run worker-pools describe "${WORKER_POOL}" \
+worker_revision="$(gcloud run worker-pools describe "${WORKER_POOL}" \
   --project="${GCP_PROJECT_ID}" \
   --region="${GCP_REGION}" \
   --format='value(status.latestReadyRevisionName)')"

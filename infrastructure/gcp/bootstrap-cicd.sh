@@ -10,6 +10,7 @@ readonly POOL_ID="${POOL_ID:-github-actions}"
 readonly PROVIDER_ID="${PROVIDER_ID:-buildflow-ai}"
 readonly DEPLOY_SERVICE_ACCOUNT_NAME="${DEPLOY_SERVICE_ACCOUNT_NAME:-buildflow-github-deploy}"
 readonly DEPLOY_SERVICE_ACCOUNT="${DEPLOY_SERVICE_ACCOUNT_NAME}@${GCP_PROJECT_ID}.iam.gserviceaccount.com"
+readonly CLOUD_BUILD_SOURCE_BUCKET="${CLOUD_BUILD_SOURCE_BUCKET:-${GCP_PROJECT_ID}_cloudbuild}"
 
 for command in gcloud gh; do
   if ! command -v "${command}" >/dev/null 2>&1; then
@@ -83,6 +84,7 @@ for role in \
   roles/artifactregistry.reader \
   roles/cloudsql.viewer \
   roles/secretmanager.viewer \
+  roles/storage.bucketViewer \
   roles/serviceusage.serviceUsageConsumer; do
   gcloud projects add-iam-policy-binding "${GCP_PROJECT_ID}" \
     --member="serviceAccount:${DEPLOY_SERVICE_ACCOUNT}" \
@@ -90,6 +92,15 @@ for role in \
     --condition=None \
     --quiet >/dev/null
 done
+
+# `gcloud builds submit` discovers the staging bucket through its project-scoped Bucket Viewer
+# role, then stages the checkout here. Object management stays restricted to this source bucket;
+# the deployer cannot administer the bucket or its IAM policy.
+gcloud storage buckets add-iam-policy-binding \
+  "gs://${CLOUD_BUILD_SOURCE_BUCKET}" \
+  --member="serviceAccount:${DEPLOY_SERVICE_ACCOUNT}" \
+  --role=roles/storage.objectAdmin \
+  --quiet >/dev/null
 
 for runtime_service_account in \
   "buildflow-web@${GCP_PROJECT_ID}.iam.gserviceaccount.com" \
@@ -124,3 +135,4 @@ printf 'Repository ID: %s\n' "${repository_id}"
 printf 'Repository owner ID: %s\n' "${repository_owner_id}"
 printf 'Workload Identity provider: %s\n' "${provider_name}"
 printf 'Deployment service account: %s\n' "${DEPLOY_SERVICE_ACCOUNT}"
+printf 'Cloud Build source bucket: gs://%s\n' "${CLOUD_BUILD_SOURCE_BUCKET}"
