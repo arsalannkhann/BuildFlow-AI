@@ -60,7 +60,11 @@ RUN pnpm --filter @buildflow/web exec playwright install --with-deps chromium
 RUN set -eux; \
     STANDALONE=/app/apps/web/.next/standalone; \
     mkdir -p "$STANDALONE/node_modules/@electric-sql"; \
-    cp -RL /app/packages/db/node_modules/@electric-sql/pglite "$STANDALONE/node_modules/@electric-sql/pglite"
+    cp -RL /app/packages/db/node_modules/@electric-sql/pglite "$STANDALONE/node_modules/@electric-sql/pglite"; \
+    # Next excludes .next/static and public/ from standalone output: the server expects them
+    # beside itself, otherwise every CSS/JS asset 404s and the app renders unstyled.
+    cp -R /app/apps/web/.next/static "$STANDALONE/apps/web/.next/static"; \
+    if [ -d /app/apps/web/public ]; then cp -R /app/apps/web/public "$STANDALONE/apps/web/public"; fi
 WORKDIR /app/apps/web
 # Standalone output ignores `next start`; run the generated server from the workspace so
 # pnpm-linked transitive deps (pg, playwright, google-cloud) still resolve.
