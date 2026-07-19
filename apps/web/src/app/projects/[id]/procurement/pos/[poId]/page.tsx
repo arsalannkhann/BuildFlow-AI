@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getDb } from "@buildflow/db/client";
+import { withTenant } from "@buildflow/db/tenant";
 import { currentContext } from "@/app/session";
 import { getProject } from "@buildflow/db/queries/projects";
 import { getPurchaseOrder, listPoLines } from "@buildflow/db/queries/procurement";
@@ -15,19 +16,22 @@ export default async function PoPage({ params }: { params: Promise<{ id: string;
   const db = await getDb();
   const base = await currentContext();
   const ctx = { ...base, projectId: id };
-  const project = await getProject(db, ctx, id);
-  const po = await getPurchaseOrder(db, ctx, poId);
+  const { project, po } = await withTenant(db, ctx, async (tx) => {
+    const project = await getProject(tx, ctx, id);
+    const po = await getPurchaseOrder(tx, ctx, poId);
+    return { project, po };
+  });
   if (!po || po.projectId !== id) notFound();
-  const [lines, supplier] = await Promise.all([
-    listPoLines(db, ctx, poId),
-    getSupplier(db, ctx, po.supplierId),
-  ]);
+  const [lines, supplier] = await withTenant(db, ctx, (tx) => Promise.all([
+    listPoLines(tx, ctx, poId),
+    getSupplier(tx, ctx, po.supplierId),
+  ]));
   const canApprove = ctx.capabilities.includes("procurement.approve");
   const canManage = ctx.capabilities.includes("procurement.manage");
 
   return (
     <>
-      <AppHeader roleLabel="Project" canCapture={ctx.capabilities.includes("report.create")} />
+      <AppHeader roleLabel="Project" canCapture={ctx.capabilities.includes("report.create")} projectName={project.name} />
       <main id="main-content" className="page-shell">
         <p className="eyebrow">Purchase order</p>
         <h1 className="page-title">{project.name}</h1>

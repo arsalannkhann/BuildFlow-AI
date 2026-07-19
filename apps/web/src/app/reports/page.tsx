@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getDb } from "@buildflow/db/client";
+import { withTenant } from "@buildflow/db/tenant";
 import { currentContext } from "@/app/session";
 import { listReports } from "@buildflow/db/queries/reports";
 import { searchApprovedReports } from "@buildflow/db/queries/search";
@@ -28,10 +29,13 @@ export default async function ReportsPage({
 }: { searchParams?: Promise<Record<string, string | string[] | undefined>> }) {
   const params = (await searchParams) ?? {};
   const q = typeof params.q === "string" ? params.q : "";
+  const statusFilter = typeof params.status === "string" ? params.status : "";
+  const projectFilter = typeof params.project === "string" ? params.project : "";
   const db = await getDb();
   const ctx = await currentContext();
-  const searchHits = q ? await searchApprovedReports(db, ctx, q) : null;
-  const [reports, projects] = await Promise.all([listReports(db, ctx), listProjects(db, ctx)]);
+  const searchHits = q ? await withTenant(db, ctx, (tx) => searchApprovedReports(tx, ctx, q)) : null;
+  const [reports, projects] = await withTenant(db, ctx, (tx) =>
+    Promise.all([listReports(tx, ctx), listProjects(tx, ctx)]));
   const projectById = new Map(projects.map((project) => [project.id, project]));
   const activeProject = (ctx.projectId ? projectById.get(ctx.projectId) : null) ?? projects[0];
   const activeTimezone = activeProject?.timezone ?? "Asia/Kolkata";
@@ -41,6 +45,44 @@ export default async function ReportsPage({
   const approved = reports.filter((report) => report.status === "APPROVED").length;
   const issued = reports.filter((report) => report.status === "ISSUED").length;
   const failures = reports.filter((report) => report.status === "PROCESSING_FAILED").length;
+
+  // Action queue ordering: a reviewer opens this page to find work, not to browse history.
+  // Failures first (inputs are safe but stuck), then drafts awaiting review, then approved
+  // reports still to issue; everything already issued drops below.
+  const ACTION_RANK: Record<string, number> = {
+    PROCESSING_FAILED: 0, AWAITING_REVIEW: 1, REJECTED: 2, APPROVED: 3,
+    PROCESSING: 4, UPLOADED: 4, SYNCING: 4,
+  };
+  const needsAction = (status: string) => (ACTION_RANK[status] ?? 9) <= 3;
+  const FILTERS: Record<string, (status: string) => boolean> = {
+    review: (s) => s === "AWAITING_REVIEW",
+    approved: (s) => s === "APPROVED",
+    issued: (s) => s === "ISSUED" || s === "SUPERSEDED",
+    failed: (s) => s === "PROCESSING_FAILED",
+  };
+  const matchesFilter: ((status: string) => boolean) | undefined = FILTERS[statusFilter];
+  const visibleReports = reports.filter((report) =>
+    (!matchesFilter || matchesFilter(report.status)) &&
+    (!projectFilter || report.projectId === projectFilter));
+  const orderedReports = statusFilter
+    ? visibleReports
+    : [...visibleReports].sort((a, b) =>
+        (ACTION_RANK[a.status] ?? 9) - (ACTION_RANK[b.status] ?? 9));
+  const actionable = orderedReports.filter((r) => needsAction(r.status));
+  const history = orderedReports.filter((r) => !needsAction(r.status));
+  const filterHref = (next: { status?: string; project?: string }) => {
+    const sp = new URLSearchParams();
+    const status = next.status ?? statusFilter;
+    const project = next.project ?? projectFilter;
+    if (status) sp.set("status", status);
+    if (project) sp.set("project", project);
+    const qs = sp.toString();
+    return qs ? `/reports?${qs}` : "/reports";
+  };
+  const FILTER_LABELS: Record<string, string> = {
+    review: "awaiting review", approved: "approved, ready to issue",
+    issued: "issued", failed: "processing failures",
+  };
   const today = formatProjectDate(new Date(), {
     timeZone: activeTimezone,
     weekday: "long",
@@ -109,27 +151,35 @@ export default async function ReportsPage({
         </section>
 
         {isManager ? (
-          <section className="manager-summary" aria-label="Report summary">
-            <article className="metric-card metric-card--attention">
+          <section className="manager-summary" aria-label="Filter reports by status">
+            <Link href={filterHref({ status: statusFilter === "review" ? "" : "review" })}
+              aria-current={statusFilter === "review" ? "true" : undefined}
+              className={`metric-card metric-card--attention${statusFilter === "review" ? " metric-card--selected" : ""}`}>
               <span className="metric-card__label">Needs review</span>
               <strong>{awaiting}</strong>
               <small>{awaiting === 1 ? "report waiting" : "reports waiting"}</small>
-            </article>
-            <article className="metric-card">
+            </Link>
+            <Link href={filterHref({ status: statusFilter === "approved" ? "" : "approved" })}
+              aria-current={statusFilter === "approved" ? "true" : undefined}
+              className={`metric-card${statusFilter === "approved" ? " metric-card--selected" : ""}`}>
               <span className="metric-card__label">Approved</span>
               <strong>{approved}</strong>
               <small>ready to issue</small>
-            </article>
-            <article className="metric-card">
+            </Link>
+            <Link href={filterHref({ status: statusFilter === "issued" ? "" : "issued" })}
+              aria-current={statusFilter === "issued" ? "true" : undefined}
+              className={`metric-card${statusFilter === "issued" ? " metric-card--selected" : ""}`}>
               <span className="metric-card__label">Issued</span>
               <strong>{issued}</strong>
               <small>finished DPRs</small>
-            </article>
-            <article className={`metric-card ${failures ? "metric-card--danger" : ""}`}>
+            </Link>
+            <Link href={filterHref({ status: statusFilter === "failed" ? "" : "failed" })}
+              aria-current={statusFilter === "failed" ? "true" : undefined}
+              className={`metric-card${failures ? " metric-card--danger" : ""}${statusFilter === "failed" ? " metric-card--selected" : ""}`}>
               <span className="metric-card__label">Processing issues</span>
               <strong>{failures}</strong>
               <small>{failures ? "needs attention" : "all clear"}</small>
-            </article>
+            </Link>
           </section>
         ) : (
           <section className="field-hero-card">
@@ -161,20 +211,89 @@ export default async function ReportsPage({
           </section>
         )}
 
+        {(statusFilter || projectFilter) && (
+          <p className="filter-notice" role="status">
+            Showing <strong>{orderedReports.length}</strong>{" "}
+            report{orderedReports.length === 1 ? "" : "s"}
+            {statusFilter ? ` ${FILTER_LABELS[statusFilter] ?? "matching"}` : ""}
+            {projectFilter ? ` in ${projectById.get(projectFilter)?.name ?? "this project"}` : ""}.{" "}
+            <Link href="/reports">Clear filter</Link>
+          </p>
+        )}
+
+        {projects.length > 1 && (
+          <nav className="project-filter" aria-label="Filter by project">
+            <Link href={filterHref({ project: "" })}
+              aria-current={projectFilter ? undefined : "true"}
+              className={projectFilter ? "project-filter__chip" : "project-filter__chip project-filter__chip--active"}>
+              All projects
+            </Link>
+            {projects.map((project) => (
+              <Link key={project.id}
+                href={filterHref({ project: projectFilter === project.id ? "" : project.id })}
+                aria-current={projectFilter === project.id ? "true" : undefined}
+                className={projectFilter === project.id
+                  ? "project-filter__chip project-filter__chip--active" : "project-filter__chip"}>
+                {project.name}
+              </Link>
+            ))}
+          </nav>
+        )}
+
+        {isManager && actionable.length > 0 && !statusFilter && (
+          <section className="report-list-section">
+            <div className="report-list-heading">
+              <div>
+                <p className="eyebrow">Action queue</p>
+                <h2 className="section-heading">Waiting for you</h2>
+              </div>
+              <span>{actionable.length} to act on</span>
+            </div>
+            <ul className="report-list">
+              {actionable.map((report) => {
+                const project = projectById.get(report.projectId);
+                const date = formatReportDate(report.reportDate, project?.timezone ?? activeTimezone);
+                return (
+                  <li key={report.id}>
+                    <Link href={`/reports/${report.id}`} className="report-row report-row--action">
+                      <span className="report-row__date" aria-label={date.full}>
+                        <strong>{date.day}</strong>
+                        <small>{date.month}</small>
+                      </span>
+                      <span className="report-row__main">
+                        <span className="report-row__topline">
+                          <strong>Daily Progress Report</strong>
+                        </span>
+                        <span>{date.full} · {project?.name ?? "Project"}</span>
+                      </span>
+                      <StatusBadge status={report.status} />
+                      <span className="report-row__arrow" aria-hidden="true">→</span>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        )}
+
         <section className="report-list-section">
           <div className="report-list-heading">
             <div>
-              <p className="eyebrow">{isManager ? "Action queue" : "Project record"}</p>
+              <p className="eyebrow">{isManager ? "Project record" : "Project record"}</p>
               <h2 className="section-heading">
-                {isManager ? "Reports requiring your attention" : "Recent daily reports"}
+                {statusFilter || projectFilter
+                  ? "Filtered reports"
+                  : isManager && actionable.length > 0
+                    ? "Everything else"
+                    : "Recent daily reports"}
               </h2>
             </div>
-            <span>{reports.length} total</span>
+            <span>{(statusFilter ? orderedReports : history).length} shown</span>
           </div>
 
-          {reports.length > 0 ? (
+          {(statusFilter ? orderedReports : history).length > 0 ? (
             <ul className="report-list">
-              {reports.map((report, index) => {
+              {(statusFilter ? orderedReports : history).map((report, index) => {
                 const project = projectById.get(report.projectId);
                 const date = formatReportDate(report.reportDate, project?.timezone ?? activeTimezone);
                 return (
@@ -205,13 +324,17 @@ export default async function ReportsPage({
                 <span />
                 <span />
               </span>
-              <h3>No reports yet</h3>
-              <p>Record the first site update. Your voice note and photos will become a review-ready DPR.</p>
-              {canCapture && (
-                <Link href="/capture" className="primary-button">
-                  Record first update
-                </Link>
-              )}
+              <h3>{statusFilter || projectFilter ? "Nothing matches this filter" : "No reports yet"}</h3>
+              <p>
+                {statusFilter || projectFilter
+                  ? "Try a different status or project, or clear the filter to see the full record."
+                  : "Record the first site update. Your voice note and photos will become a review-ready DPR."}
+              </p>
+              {statusFilter || projectFilter ? (
+                <Link href="/reports" className="secondary-button">Clear filter</Link>
+              ) : canCapture ? (
+                <Link href="/capture" className="primary-button">Record first update</Link>
+              ) : null}
             </div>
           )}
         </section>

@@ -1,6 +1,7 @@
 "use server";
 import { redirect } from "next/navigation";
 import { getDb } from "@buildflow/db/client";
+import { withTenant } from "@buildflow/db/tenant";
 import { getStorage } from "@buildflow/storage/factory";
 import { currentContext } from "@/app/session";
 import { submitReport, type UploadFile } from "./capture-core";
@@ -23,13 +24,14 @@ export async function submitCaptureAction(formData: FormData): Promise<void> {
   if (audio.size + photos.reduce((total, photo) => total + photo.size, 0) > 100 * 1024 * 1024) {
     throw new Error("Submission is too large (max 100 MB)");
   }
-  const projects = await listProjects(db, ctx);
+  const projects = await withTenant(db, ctx, (tx) => listProjects(tx, ctx));
   const project = projects.find((item) => item.id === ctx.projectId) ?? projects[0];
   if (!project) throw new Error("No project is assigned to this account");
-  const reportId = await submitReport(db, getStorage(), { ...ctx, projectId: project.id }, {
+  const scoped = { ...ctx, projectId: project.id };
+  const reportId = await withTenant(db, scoped, async (tx) => submitReport(tx, getStorage(), scoped, {
     reportDate: projectToday(project.timezone),
     note: (formData.get("note") as string) || undefined,
     audio: await toFile(audio), photos: await Promise.all(photos.map(toFile)),
-  });
+  }));
   redirect(`/reports/${reportId}`);
 }

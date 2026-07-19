@@ -1,4 +1,5 @@
 import { getDb } from "@buildflow/db/client";
+import { withTenant } from "@buildflow/db/tenant";
 import { currentContext } from "@/app/session";
 import { getProject } from "@buildflow/db/queries/projects";
 import { projectOverview } from "@/core/controls-core";
@@ -12,14 +13,17 @@ export default async function ProjectOverviewPage({ params }: { params: Promise<
   const db = await getDb();
   const base = await currentContext();
   const ctx = { ...base, projectId: id };
-  const project = await getProject(db, ctx, id);
-  const overview = await projectOverview(db, ctx, id);
-  const shortages = await shortageAlerts(db, ctx, id);
+  const { project, overview, shortages } = await withTenant(db, ctx, async (tx) => {
+    const project = await getProject(tx, ctx, id);
+    const overview = await projectOverview(tx, ctx, id);
+    const shortages = await shortageAlerts(tx, ctx, id);
+    return { project, overview, shortages };
+  });
   const missingDays = overview.reporting.last7Days.filter((d) => !d.hasAny).length;
 
   return (
     <>
-      <AppHeader roleLabel="Project" canCapture={ctx.capabilities.includes("report.create")} />
+      <AppHeader roleLabel="Project" canCapture={ctx.capabilities.includes("report.create")} projectName={project.name} />
       <main id="main-content" className="page-shell">
         <p className="eyebrow">Project overview</p>
         <h1 className="page-title">{project.name}</h1>

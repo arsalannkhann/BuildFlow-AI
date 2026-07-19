@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getDb } from "@buildflow/db/client";
+import { withTenant } from "@buildflow/db/tenant";
 import { formatINR } from "@buildflow/domain/money";
 import { currentContext } from "@/app/session";
 import { AppHeader } from "@/app/components/AppHeader";
@@ -12,7 +13,7 @@ export const dynamic = "force-dynamic";
 export default async function PortfolioPage() {
   const db = await getDb();
   const ctx = await currentContext();
-  const portfolio = await portfolioOverview(db, ctx);
+  const portfolio = await withTenant(db, ctx, (tx) => portfolioOverview(tx, ctx));
   const { totals, jobs } = portfolio;
 
   return (

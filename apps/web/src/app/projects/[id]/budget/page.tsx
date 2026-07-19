@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getDb } from "@buildflow/db/client";
+import { withTenant } from "@buildflow/db/tenant";
 import { currentContext } from "@/app/session";
 import { getProject } from "@buildflow/db/queries/projects";
 import { listInvoices } from "@buildflow/db/queries/invoices";
@@ -14,18 +15,21 @@ export default async function BudgetPage({ params }: { params: Promise<{ id: str
   const db = await getDb();
   const base = await currentContext();
   const ctx = { ...base, projectId: id };
-  const project = await getProject(db, ctx, id);
-  const [rollup, invoices] = await Promise.all([
-    budgetRollup(db, ctx, id),
-    listInvoices(db, ctx, id),
-  ]);
+  const { project, rollup, invoices } = await withTenant(db, ctx, async (tx) => {
+    const project = await getProject(tx, ctx, id);
+    const [rollup, invoices] = await Promise.all([
+      budgetRollup(tx, ctx, id),
+      listInvoices(tx, ctx, id),
+    ]);
+    return { project, rollup, invoices };
+  });
   const canManageBudget = ctx.capabilities.includes("budget.manage");
   const canEnterInvoice = ctx.capabilities.includes("material.manage") || ctx.capabilities.includes("invoice.review");
   const reviewQueue = invoices.filter((i) => i.status !== "approved");
 
   return (
     <>
-      <AppHeader roleLabel="Project" canCapture={ctx.capabilities.includes("report.create")} />
+      <AppHeader roleLabel="Project" canCapture={ctx.capabilities.includes("report.create")} projectName={project.name} />
       <main id="main-content" className="page-shell">
         <p className="eyebrow">Budget and cost</p>
         <h1 className="page-title">{project.name}</h1>

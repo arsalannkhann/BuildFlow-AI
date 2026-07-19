@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getDb } from "@buildflow/db/client";
+import { withTenant } from "@buildflow/db/tenant";
 import { currentContext } from "@/app/session";
 import { listProjects } from "@buildflow/db/queries/projects";
 import { AppHeader } from "@/app/components/AppHeader";
@@ -8,7 +9,7 @@ import { createProjectAction } from "@/app/actions/admin";
 export default async function ProjectsPage() {
   const db = await getDb();
   const ctx = await currentContext();
-  const projects = await listProjects(db, ctx);
+  const projects = await withTenant(db, ctx, (tx) => listProjects(tx, ctx));
   const canCreate = ctx.capabilities.includes("org.manage");
   const canManage = ctx.capabilities.includes("project.manage") || canCreate;
 

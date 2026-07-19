@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getDb } from "@buildflow/db/client";
+import { withTenant } from "@buildflow/db/tenant";
 import { currentContext } from "@/app/session";
 import { AppHeader } from "@/app/components/AppHeader";
 import { myNotifications, notificationHref } from "@/core/notifications-core";
@@ -20,7 +21,7 @@ function deliveryLabel(d: NotificationDeliveryRow): string {
 export default async function NotificationsPage() {
   const db = await getDb();
   const ctx = await currentContext();
-  const rows = await myNotifications(db, ctx, { limit: 100 });
+  const rows = await withTenant(db, ctx, (tx) => myNotifications(tx, ctx, { limit: 100 }));
   const unread = rows.filter((r) => !r.readAt);
 
   return (

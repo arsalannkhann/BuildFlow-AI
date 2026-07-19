@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getDb } from "@buildflow/db/client";
+import { withTenant } from "@buildflow/db/tenant";
 import { currentContext } from "@/app/session";
 import { getProject } from "@buildflow/db/queries/projects";
 import { getReceipt, getSupplier, listMaterials, listReceiptLines } from "@buildflow/db/queries/materials";
@@ -17,21 +18,27 @@ export default async function ReceiptReviewPage({ params }: { params: Promise<{ 
   const db = await getDb();
   const base = await currentContext();
   const ctx = { ...base, projectId: id };
-  const project = await getProject(db, ctx, id);
-  const receipt = await getReceipt(db, ctx, receiptId);
+  const { project, receipt } = await withTenant(db, ctx, async (tx) => {
+    const project = await getProject(tx, ctx, id);
+    const receipt = await getReceipt(tx, ctx, receiptId);
+    return { project, receipt };
+  });
   if (!receipt || receipt.projectId !== id) notFound();
-  const [lines, catalogue] = await Promise.all([
-    listReceiptLines(db, ctx, receiptId),
-    listMaterials(db, ctx),
-  ]);
-  const supplier = receipt.supplierId ? await getSupplier(db, ctx, receipt.supplierId) : null;
+  const { lines, catalogue, supplier } = await withTenant(db, ctx, async (tx) => {
+    const [lines, catalogue] = await Promise.all([
+      listReceiptLines(tx, ctx, receiptId),
+      listMaterials(tx, ctx),
+    ]);
+    const supplier = receipt.supplierId ? await getSupplier(tx, ctx, receipt.supplierId) : null;
+    return { lines, catalogue, supplier };
+  });
   const canManage = ctx.capabilities.includes("material.manage");
   const canReview = ctx.capabilities.includes("material.review");
   const editable = receipt.status !== "posted";
 
   return (
     <>
-      <AppHeader roleLabel="Project" canCapture={ctx.capabilities.includes("report.create")} />
+      <AppHeader roleLabel="Project" canCapture={ctx.capabilities.includes("report.create")} projectName={project.name} />
       <main id="main-content" className="page-shell">
         <p className="eyebrow">Material receipt</p>
         <h1 className="page-title">{project.name}</h1>

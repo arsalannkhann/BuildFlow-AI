@@ -5,6 +5,7 @@ import { authCredentials, invitations, memberships, users } from "@buildflow/db/
 import { hashPassword } from "@buildflow/domain/security/password";
 import { newId } from "@buildflow/domain/ids";
 import { capabilitiesForRole, type Role, type TenantContext } from "@buildflow/domain/tenancy";
+import { withPublicToken, withTenant } from "@buildflow/db/tenant";
 
 const tokenHash = (t: string) => createHash("sha256").update(t).digest("hex");
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -48,8 +49,10 @@ export async function revokeInvitation(
 export async function findPendingInvitation(
   db: AppDb, token: string,
 ): Promise<InvitationRow | null> {
-  const [row] = await db.select().from(invitations)
-    .where(eq(invitations.tokenHash, tokenHash(token)));
+  // The token is the credential and the row it finds is what names the tenant, so this
+  // single read runs on the public-token path; everything after it is tenant-scoped.
+  const [row] = await withPublicToken(db, (tx) => tx.select().from(invitations)
+    .where(eq(invitations.tokenHash, tokenHash(token))));
   if (!row || row.status !== "pending") return null;
   if (row.expiresAt.getTime() <= Date.now()) return null;
   return row;
@@ -67,7 +70,13 @@ export async function acceptInvitation(db: AppDb, input: {
   if (!email) throw new Error("Email required to create the account");
   const role = invitation.role as Role;
   const userId = newId();
-  await db.transaction(async (tx) => {
+  // The invitation named the organization, so the account creation itself is ordinary
+  // tenant-scoped work — user, credential, membership and the status flip all commit
+  // together under that organization's RLS context.
+  const inviteCtx: TenantContext = {
+    organizationId: invitation.organizationId, userId, capabilities: [],
+  };
+  await withTenant(db, inviteCtx, async (tx) => {
     await tx.insert(users).values({
       id: userId, organizationId: invitation.organizationId,
       displayName: input.displayName,

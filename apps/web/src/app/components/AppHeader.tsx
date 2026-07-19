@@ -2,6 +2,7 @@ import Link from "next/link";
 import { eq } from "drizzle-orm";
 import { getDb } from "@buildflow/db/client";
 import { ensureBooted } from "@buildflow/db/boot";
+import { withTenant } from "@buildflow/db/tenant";
 import { memberships } from "@buildflow/db/schema";
 import { getAuth } from "@buildflow/auth/dev";
 import { resolveTenantContext } from "@buildflow/auth/context";
@@ -44,10 +45,10 @@ async function headerSession(): Promise<HeaderSession | null> {
     if (!sessionUser) return null;
     const ctx = await resolveTenantContext(db, sessionUser.userId);
 
-    const [unread, myMemberships] = await Promise.all([
-      unreadNotificationCount(db, ctx),
-      db.select().from(memberships).where(eq(memberships.userId, ctx.userId)),
-    ]);
+    const [unread, myMemberships] = await withTenant(db, ctx, (tx) => Promise.all([
+      unreadNotificationCount(tx, ctx),
+      tx.select().from(memberships).where(eq(memberships.userId, ctx.userId)),
+    ]));
     const activeMembership =
       myMemberships.find((m) => m.projectId && m.projectId === ctx.projectId) ??
       myMemberships.find((m) => m.projectId === null) ??
@@ -58,8 +59,10 @@ async function headerSession(): Promise<HeaderSession | null> {
       : "Signed in";
 
     let projectName: string | null = null;
-    if (ctx.projectId) {
-      projectName = (await getProject(db, ctx, ctx.projectId).catch(() => null))?.name ?? null;
+    const activeProjectId = ctx.projectId;
+    if (activeProjectId) {
+      projectName = (await withTenant(db, ctx, (tx) => getProject(tx, ctx, activeProjectId))
+        .catch(() => null))?.name ?? null;
     }
 
     const projectIds = new Set(myMemberships.map((m) => m.projectId).filter(Boolean));
@@ -90,11 +93,15 @@ export async function AppHeader({
   roleLabel: legacyRoleLabel,
   canCapture = false,
   compact = false,
+  projectName,
 }: {
   /** @deprecated The header derives the role from the session; this is a fallback only. */
   roleLabel?: string;
   canCapture?: boolean;
   compact?: boolean;
+  /** Project being viewed. Overrides the session default so the header never claims a
+   *  different project than the page (project pages pass their own). */
+  projectName?: string;
 }) {
   const session = await headerSession();
   const roleLabel = session?.roleLabel ?? legacyRoleLabel ?? "Signed in";
@@ -126,12 +133,12 @@ export async function AppHeader({
           </span>
         </Link>
 
-        {session?.projectName ? (
+        {projectName ?? session?.projectName ? (
           <div className="app-header__project" aria-label="Current project">
             <span className="project-pulse" aria-hidden="true" />
             <span>
               <small>Active project</small>
-              <strong>{session.projectName}</strong>
+              <strong>{projectName ?? session?.projectName}</strong>
             </span>
           </div>
         ) : null}

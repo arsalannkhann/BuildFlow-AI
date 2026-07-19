@@ -34,3 +34,23 @@ export async function withAuthBootstrap<T>(
   });
 }
 
+/**
+ * Runs `fn` with read access to the token-holder tables for a caller presenting an
+ * unguessable token instead of a session: invitation acceptance and client share links
+ * (see drizzle/0014_public_token_rls_path.sql). The token is the credential, and the row
+ * it resolves to is what names the tenant.
+ *
+ * Reachable by anyone holding a URL, so the policy behind it is SELECT-only and covers
+ * only "invitation" and "client_link". Resolve the row here, then switch to withTenant()
+ * with the organization it names for everything that follows.
+ */
+export async function withPublicToken<T>(
+  db: AppDb,
+  fn: (tx: AppDb) => Promise<T>,
+): Promise<T> {
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`select set_config('app.public_token', 'on', true)`);
+    return fn(tx as unknown as AppDb);
+  });
+}
+

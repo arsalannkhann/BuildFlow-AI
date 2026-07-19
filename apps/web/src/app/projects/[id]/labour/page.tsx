@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getDb } from "@buildflow/db/client";
+import { withTenant } from "@buildflow/db/tenant";
 import { currentContext } from "@/app/session";
 import { getProject } from "@buildflow/db/queries/projects";
 import { listContractors } from "@buildflow/db/queries/labour";
@@ -14,18 +15,21 @@ export default async function LabourPage({ params }: { params: Promise<{ id: str
   const db = await getDb();
   const base = await currentContext();
   const ctx = { ...base, projectId: id };
-  const project = await getProject(db, ctx, id);
-  const [contractors, activities, summary, productivity] = await Promise.all([
-    listContractors(db, ctx, id),
-    listActivities(db, ctx, id),
-    attendanceSummary(db, ctx, id),
-    labourProductivity(db, ctx, id),
-  ]);
+  const { project, contractors, activities, summary, productivity } = await withTenant(db, ctx, async (tx) => {
+    const project = await getProject(tx, ctx, id);
+    const [contractors, activities, summary, productivity] = await Promise.all([
+      listContractors(tx, ctx, id),
+      listActivities(tx, ctx, id),
+      attendanceSummary(tx, ctx, id),
+      labourProductivity(tx, ctx, id),
+    ]);
+    return { project, contractors, activities, summary, productivity };
+  });
   const canManage = ctx.capabilities.includes("labour.manage");
 
   return (
     <>
-      <AppHeader roleLabel="Project" canCapture={ctx.capabilities.includes("report.create")} />
+      <AppHeader roleLabel="Project" canCapture={ctx.capabilities.includes("report.create")} projectName={project.name} />
       <main id="main-content" className="page-shell">
         <p className="eyebrow">Labour</p>
         <h1 className="page-title">{project.name}</h1>

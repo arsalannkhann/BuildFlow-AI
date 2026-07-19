@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getDb } from "@buildflow/db/client";
+import { withTenant } from "@buildflow/db/tenant";
 import { resolveTenantContext } from "@buildflow/auth/context";
 import { getProject } from "@buildflow/db/queries/projects";
 import { listReports } from "@buildflow/db/queries/reports";
@@ -27,9 +28,9 @@ export default async function CompliancePackPage({ params }: {
   const db = await getDb();
   const base = await currentContext();
   const ctx = await resolveTenantContext(db, base.userId, id);
-  const project = await getProject(db, ctx, id);
+  const project = await withTenant(db, ctx, (tx) => getProject(tx, ctx, id));
   let detail;
-  try { detail = await compliancePackDetail(db, ctx, packId); } catch { notFound(); }
+  try { detail = await withTenant(db, ctx, (tx) => compliancePackDetail(tx, ctx, packId)); } catch { notFound(); }
   const { pack, requirements, exports } = detail;
   if (pack.projectId !== id) notFound();
   const canManage = ctx.capabilities.includes("compliance.manage");
@@ -38,14 +39,19 @@ export default async function CompliancePackPage({ params }: {
   const pending = requirements.filter((r) => r.status === "pending").length;
   const resolved = requirements.length - pending;
 
-  const reports = editable ? (await listReports(db, ctx)).filter((r) => r.projectId === id && ["APPROVED", "ISSUED", "SUPERSEDED"].includes(r.status)) : [];
-  const attachments = editable ? (await Promise.all(reports.map((r) => listAttachments(db, ctx, r.id)))).flat() : [];
-  const documents = editable ? (await listDocuments(db, ctx, id)).filter((d) => d.currentRevisionId) : [];
-  const mbEntries = editable ? (await listMbEntries(db, ctx, id, { status: "certified" })).filter((e) => !e.supersededBy) : [];
+  const { reports, attachments, documents, mbEntries } = editable
+    ? await withTenant(db, ctx, async (tx) => {
+        const reports = (await listReports(tx, ctx)).filter((r) => r.projectId === id && ["APPROVED", "ISSUED", "SUPERSEDED"].includes(r.status));
+        const attachments = (await Promise.all(reports.map((r) => listAttachments(tx, ctx, r.id)))).flat();
+        const documents = (await listDocuments(tx, ctx, id)).filter((d) => d.currentRevisionId);
+        const mbEntries = (await listMbEntries(tx, ctx, id, { status: "certified" })).filter((e) => !e.supersededBy);
+        return { reports, attachments, documents, mbEntries };
+      })
+    : { reports: [], attachments: [], documents: [], mbEntries: [] };
 
   return (
     <>
-      <AppHeader roleLabel="Project" canCapture={ctx.capabilities.includes("report.create")} />
+      <AppHeader roleLabel="Project" canCapture={ctx.capabilities.includes("report.create")} projectName={project.name} />
       <main id="main-content" className="page-shell compliance-page">
         <p className="eyebrow">Compliance evidence pack</p>
         <h1 className="page-title">{project.name}</h1>

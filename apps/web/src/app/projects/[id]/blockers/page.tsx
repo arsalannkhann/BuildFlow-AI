@@ -1,4 +1,5 @@
 import { getDb } from "@buildflow/db/client";
+import { withTenant } from "@buildflow/db/tenant";
 import { currentContext } from "@/app/session";
 import { getProject } from "@buildflow/db/queries/projects";
 import { listBlockers, listScheduleItems } from "@buildflow/db/queries/controls";
@@ -11,17 +12,20 @@ export default async function BlockersPage({ params }: { params: Promise<{ id: s
   const db = await getDb();
   const base = await currentContext();
   const ctx = { ...base, projectId: id };
-  const project = await getProject(db, ctx, id);
-  const [blockers, items] = await Promise.all([
-    listBlockers(db, ctx, id), listScheduleItems(db, ctx, id),
-  ]);
+  const { project, blockers, items } = await withTenant(db, ctx, async (tx) => {
+    const project = await getProject(tx, ctx, id);
+    const [blockers, items] = await Promise.all([
+      listBlockers(tx, ctx, id), listScheduleItems(tx, ctx, id),
+    ]);
+    return { project, blockers, items };
+  });
   const open = blockers.filter((b) => b.status !== "resolved");
   const resolved = blockers.filter((b) => b.status === "resolved");
   const canManage = ctx.capabilities.includes("blocker.manage");
 
   return (
     <>
-      <AppHeader roleLabel="Project" canCapture={ctx.capabilities.includes("report.create")} />
+      <AppHeader roleLabel="Project" canCapture={ctx.capabilities.includes("report.create")} projectName={project.name} />
       <main id="main-content" className="page-shell">
         <p className="eyebrow">Blockers</p>
         <h1 className="page-title">{project.name}</h1>

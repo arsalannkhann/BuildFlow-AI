@@ -99,6 +99,13 @@
       "when": 1784500000000,
       "tag": "0013_preauth_and_system_rls_paths",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1784500100000,
+      "tag": "0014_public_token_rls_path",
+      "breakpoints": true
     }
   ]
 }

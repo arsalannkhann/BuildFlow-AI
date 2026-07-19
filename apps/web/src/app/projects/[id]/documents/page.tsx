@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getDb } from "@buildflow/db/client";
+import { withTenant } from "@buildflow/db/tenant";
 import { currentContext } from "@/app/session";
 import { getProject } from "@buildflow/db/queries/projects";
 import { listDocuments } from "@buildflow/db/queries/controls";
@@ -12,13 +13,16 @@ export default async function DocumentsPage({ params }: { params: Promise<{ id: 
   const db = await getDb();
   const base = await currentContext();
   const ctx = { ...base, projectId: id };
-  const project = await getProject(db, ctx, id);
-  const docs = await listDocuments(db, ctx, id);
+  const { project, docs } = await withTenant(db, ctx, async (tx) => {
+    const project = await getProject(tx, ctx, id);
+    const docs = await listDocuments(tx, ctx, id);
+    return { project, docs };
+  });
   const canManage = ctx.capabilities.includes("document.manage");
 
   return (
     <>
-      <AppHeader roleLabel="Project" canCapture={ctx.capabilities.includes("report.create")} />
+      <AppHeader roleLabel="Project" canCapture={ctx.capabilities.includes("report.create")} projectName={project.name} />
       <main id="main-content" className="page-shell">
         <p className="eyebrow">Drawing and document register</p>
         <h1 className="page-title">{project.name}</h1>

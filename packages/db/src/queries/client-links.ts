@@ -4,6 +4,7 @@ import type { AppDb } from "@buildflow/db/client";
 import { clientLinks, dailyReports, issuedDocuments, reportRevisions } from "@buildflow/db/schema";
 import { newId } from "@buildflow/domain/ids";
 import type { TenantContext } from "@buildflow/domain/tenancy";
+import { withPublicToken, withTenant } from "@buildflow/db/tenant";
 
 const tokenHash = (t: string) => createHash("sha256").update(t).digest("hex");
 const LINK_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -50,19 +51,26 @@ export type ResolvedClientLink = {
 export async function resolveClientLink(
   db: AppDb, rawToken: string,
 ): Promise<ResolvedClientLink | null> {
-  const [link] = await db.select().from(clientLinks)
-    .where(eq(clientLinks.tokenHash, tokenHash(rawToken)));
+  // Only the token lookup itself is pre-tenant; the row it returns names the organization,
+  // so the documents it points at are read under that tenant's normal RLS context.
+  const [link] = await withPublicToken(db, (tx) => tx.select().from(clientLinks)
+    .where(eq(clientLinks.tokenHash, tokenHash(rawToken))));
   if (!link) return null;
   if (link.revokedAt || link.expiresAt.getTime() <= Date.now()) return null;
-  const [issued] = await db.select().from(issuedDocuments).where(and(
-    eq(issuedDocuments.id, link.issuedDocumentId),
-    eq(issuedDocuments.organizationId, link.organizationId)));
-  if (!issued) return null;
-  const [report] = await db.select().from(dailyReports).where(and(
-    eq(dailyReports.id, link.reportId), eq(dailyReports.organizationId, link.organizationId)));
-  const [revision] = await db.select().from(reportRevisions).where(and(
-    eq(reportRevisions.id, issued.revisionId),
-    eq(reportRevisions.organizationId, link.organizationId)));
-  if (!report || !revision) return null;
-  return { link, report, issued, revision };
+  const linkCtx: TenantContext = {
+    organizationId: link.organizationId, userId: "client-link", capabilities: [],
+  };
+  return withTenant(db, linkCtx, async (tx) => {
+    const [issued] = await tx.select().from(issuedDocuments).where(and(
+      eq(issuedDocuments.id, link.issuedDocumentId),
+      eq(issuedDocuments.organizationId, link.organizationId)));
+    if (!issued) return null;
+    const [report] = await tx.select().from(dailyReports).where(and(
+      eq(dailyReports.id, link.reportId), eq(dailyReports.organizationId, link.organizationId)));
+    const [revision] = await tx.select().from(reportRevisions).where(and(
+      eq(reportRevisions.id, issued.revisionId),
+      eq(reportRevisions.organizationId, link.organizationId)));
+    if (!report || !revision) return null;
+    return { link, report, issued, revision };
+  });
 }

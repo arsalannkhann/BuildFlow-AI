@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getDb } from "@buildflow/db/client";
+import { withTenant } from "@buildflow/db/tenant";
 import { assertCan } from "@buildflow/domain/tenancy";
 import {
   listOperationalJobs, listStuckProcessing, providerRunHealth,
@@ -14,9 +15,9 @@ export default async function ProviderHealthPage() {
   const db = await getDb();
   const ctx = await currentContext();
   try { assertCan(ctx, "org.audit.read"); } catch { notFound(); }
-  const [jobs, stuck, providers] = await Promise.all([
-    listOperationalJobs(db, ctx), listStuckProcessing(db, ctx), providerRunHealth(db, ctx),
-  ]);
+  const [jobs, stuck, providers] = await withTenant(db, ctx, (tx) => Promise.all([
+    listOperationalJobs(tx, ctx), listStuckProcessing(tx, ctx), providerRunHealth(tx, ctx),
+  ]));
   const dead = jobs.filter((job) => job.status === "dead").length;
   const retrying = jobs.filter((job) => job.status === "queued" && job.attempts > 0).length;
 

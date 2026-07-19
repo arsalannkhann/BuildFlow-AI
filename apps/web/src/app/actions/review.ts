@@ -1,6 +1,7 @@
 "use server";
 import { revalidatePath } from "next/cache";
 import { getDb } from "@buildflow/db/client";
+import { withTenant } from "@buildflow/db/tenant";
 import { getStorage } from "@buildflow/storage/factory";
 import { currentContext } from "@/app/session";
 import { approveReport, requestChanges, issueReport } from "./review-core";
@@ -8,19 +9,19 @@ import { approveReport, requestChanges, issueReport } from "./review-core";
 export async function approveAction(formData: FormData): Promise<void> {
   const db = await getDb(); const ctx = await currentContext();
   const reportId = String(formData.get("reportId"));
-  await approveReport(db, ctx, reportId);
+  await withTenant(db, ctx, (tx) => approveReport(tx, ctx, reportId));
   revalidatePath(`/reports/${reportId}`);
 }
 export async function requestChangesAction(formData: FormData): Promise<void> {
   const db = await getDb(); const ctx = await currentContext();
   const reportId = String(formData.get("reportId"));
-  await requestChanges(db, ctx, reportId, String(formData.get("reason") ?? ""));
+  await withTenant(db, ctx, (tx) => requestChanges(tx, ctx, reportId, String(formData.get("reason") ?? "")));
   revalidatePath(`/reports/${reportId}`);
 }
 export async function issueAction(formData: FormData): Promise<void> {
   const db = await getDb(); const ctx = await currentContext();
   const reportId = String(formData.get("reportId"));
-  await issueReport(db, getStorage(), ctx, reportId);
+  await withTenant(db, ctx, (tx) => issueReport(tx, getStorage(), ctx, reportId));
   revalidatePath(`/reports/${reportId}`);
 }
 
@@ -39,36 +40,36 @@ export async function fieldDecisionAction(formData: FormData): Promise<void> {
   const rawValue = formData.get("newValue");
   const newValue = typeof rawValue === "string" && rawValue.trim() !== ""
     ? JSON.parse(rawValue) as unknown : undefined;
-  await applyReviewFieldDecision(db, ctx, reportId, {
+  await withTenant(db, ctx, (tx) => applyReviewFieldDecision(tx, ctx, reportId, {
     path: String(formData.get("path")), decision, newValue,
-  });
+  }));
   revalidatePath(`/reports/${reportId}`);
 }
 
 export async function retryProcessingAction(formData: FormData): Promise<void> {
   const db = await getDb(); const ctx = await currentContext();
   const reportId = String(formData.get("reportId"));
-  await retryProcessing(db, ctx, reportId);
+  await withTenant(db, ctx, (tx) => retryProcessing(tx, ctx, reportId));
   revalidatePath(`/reports/${reportId}`);
 }
 
 export async function manualDraftAction(formData: FormData): Promise<void> {
   const db = await getDb(); const ctx = await currentContext();
   const reportId = String(formData.get("reportId"));
-  await createManualDraft(db, ctx, reportId);
+  await withTenant(db, ctx, (tx) => createManualDraft(tx, ctx, reportId));
   revalidatePath(`/reports/${reportId}`);
 }
 
 export async function createClientLinkAction(formData: FormData): Promise<void> {
   const db = await getDb(); const ctx = await currentContext();
   const reportId = String(formData.get("reportId"));
-  const link = await createReportClientLink(db, ctx, reportId);
+  const link = await withTenant(db, ctx, (tx) => createReportClientLink(tx, ctx, reportId));
   redirect(`/reports/${reportId}?clientLink=${encodeURIComponent(link.token)}`);
 }
 
 export async function revokeClientLinkAction(formData: FormData): Promise<void> {
   const db = await getDb(); const ctx = await currentContext();
   const reportId = String(formData.get("reportId"));
-  await revokeReportClientLink(db, ctx, reportId, String(formData.get("linkId")));
+  await withTenant(db, ctx, (tx) => revokeReportClientLink(tx, ctx, reportId, String(formData.get("linkId"))));
   revalidatePath(`/reports/${reportId}`);
 }

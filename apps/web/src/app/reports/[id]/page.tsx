@@ -1,4 +1,5 @@
 import { getDb } from "@buildflow/db/client";
+import { withTenant } from "@buildflow/db/tenant";
 import { currentContext } from "@/app/session";
 import { getReport } from "@buildflow/db/queries/reports";
 import { latestRevision } from "@buildflow/db/queries/revisions";
@@ -21,24 +22,27 @@ export default async function ReportPage({ params, searchParams }: {
   const query = (await searchParams) ?? {};
   const db = await getDb();
   const ctx = await currentContext();
-  const report = await getReport(db, ctx, id);
-  const project = await getProject(db, ctx, report.projectId);
-  const rev = await latestRevision(db, ctx, id);
-  const atts = await listAttachments(db, ctx, id);
+  const { report, project, rev, atts } = await withTenant(db, ctx, async (tx) => {
+    const report = await getReport(tx, ctx, id);
+    const project = await getProject(tx, ctx, report.projectId);
+    const rev = await latestRevision(tx, ctx, id);
+    const atts = await listAttachments(tx, ctx, id);
+    return { report, project, rev, atts };
+  });
   const rows = rev ? buildFieldRows(rev.structuredData as DprStructuredData) : [];
   const transcript = (rev?.transcript as { text: string } | null)?.text ?? "";
   const photoIds = atts.filter((a) => a.kind === "photo").map((a) => a.id);
   const canApprove = ctx.capabilities.includes("report.approve");
   const canReview = ctx.capabilities.includes("report.review");
   const clientLinks = (report.status === "ISSUED" || report.status === "SUPERSEDED")
-    ? await listClientLinks(db, ctx, id) : [];
+    ? await withTenant(db, ctx, (tx) => listClientLinks(tx, ctx, id)) : [];
   const isApproved = ["APPROVED", "ISSUED", "SUPERSEDED"].includes(report.status);
   const projectCtx = { ...ctx, projectId: report.projectId };
   const canLinkSchedule = isApproved && ctx.capabilities.includes("schedule.manage");
   const scheduleItems = canLinkSchedule
-    ? await listScheduleItems(db, projectCtx, report.projectId) : [];
+    ? await withTenant(db, projectCtx, (tx) => listScheduleItems(tx, projectCtx, report.projectId)) : [];
   const scheduleLinks = canLinkSchedule
-    ? await listReportLinks(db, projectCtx, { reportId: id }) : [];
+    ? await withTenant(db, projectCtx, (tx) => listReportLinks(tx, projectCtx, { reportId: id })) : [];
   const canTrackBlockers = isApproved && ctx.capabilities.includes("blocker.manage");
   const extractedBlockers = canTrackBlockers && rev
     ? (rev.structuredData as DprStructuredData).blockers : [];

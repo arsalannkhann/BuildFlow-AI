@@ -1,4 +1,5 @@
 import { getDb } from "@buildflow/db/client";
+import { withTenant } from "@buildflow/db/tenant";
 import { currentContext } from "@/app/session";
 import { getProject } from "@buildflow/db/queries/projects";
 import { listDependencies, listScheduleItems } from "@buildflow/db/queries/controls";
@@ -14,12 +15,15 @@ export default async function SchedulePage({ params }: { params: Promise<{ id: s
   const db = await getDb();
   const base = await currentContext();
   const ctx = { ...base, projectId: id };
-  const project = await getProject(db, ctx, id);
-  const [items, deps, reports] = await Promise.all([
-    listScheduleItems(db, ctx, id),
-    listDependencies(db, ctx, id),
-    listReports(db, ctx),
-  ]);
+  const { project, items, deps, reports } = await withTenant(db, ctx, async (tx) => {
+    const project = await getProject(tx, ctx, id);
+    const [items, deps, reports] = await Promise.all([
+      listScheduleItems(tx, ctx, id),
+      listDependencies(tx, ctx, id),
+      listReports(tx, ctx),
+    ]);
+    return { project, items, deps, reports };
+  });
   const approvedReports = reports.filter((r) =>
     r.projectId === id && ["APPROVED", "ISSUED"].includes(r.status));
   const canManage = ctx.capabilities.includes("schedule.manage");
@@ -27,7 +31,7 @@ export default async function SchedulePage({ params }: { params: Promise<{ id: s
 
   return (
     <>
-      <AppHeader roleLabel="Project" canCapture={ctx.capabilities.includes("report.create")} />
+      <AppHeader roleLabel="Project" canCapture={ctx.capabilities.includes("report.create")} projectName={project.name} />
       <main id="main-content" className="page-shell">
         <p className="eyebrow">Schedule</p>
         <h1 className="page-title">{project.name}</h1>

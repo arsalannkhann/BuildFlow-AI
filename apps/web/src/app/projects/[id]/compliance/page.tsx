@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getDb } from "@buildflow/db/client";
+import { withTenant } from "@buildflow/db/tenant";
 import { resolveTenantContext } from "@buildflow/auth/context";
 import { getProject } from "@buildflow/db/queries/projects";
 import { COMPLIANCE_LEGAL_CAUTION, COMPLIANCE_PACK_LABELS } from "@buildflow/domain/compliance/templates";
@@ -16,14 +17,16 @@ export default async function CompliancePage({ params }: { params: Promise<{ id:
   const db = await getDb();
   const base = await currentContext();
   const ctx = await resolveTenantContext(db, base.userId, id);
-  const project = await getProject(db, ctx, id);
-  const packs = await complianceDashboard(db, ctx, id);
+  const { project, packs } = await withTenant(db, ctx, async (tx) => ({
+    project: await getProject(tx, ctx, id),
+    packs: await complianceDashboard(tx, ctx, id),
+  }));
   const canManage = ctx.capabilities.includes("compliance.manage");
   const overdue = packs.reduce((sum, pack) => sum + pack.overdue, 0);
 
   return (
     <>
-      <AppHeader roleLabel="Project" canCapture={ctx.capabilities.includes("report.create")} />
+      <AppHeader roleLabel="Project" canCapture={ctx.capabilities.includes("report.create")} projectName={project.name} />
       <main id="main-content" className="page-shell compliance-page">
         <div className="compliance-title-row">
           <div>

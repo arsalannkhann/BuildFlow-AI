@@ -1,4 +1,5 @@
 import { getDb } from "@buildflow/db/client";
+import { withTenant } from "@buildflow/db/tenant";
 import { currentContext } from "@/app/session";
 import { getProject } from "@buildflow/db/queries/projects";
 import { listAssignments, listEquipment, listEquipmentLogs, listServices } from "@buildflow/db/queries/equipment";
@@ -15,20 +16,23 @@ export default async function EquipmentPage({ params }: { params: Promise<{ id: 
   const db = await getDb();
   const base = await currentContext();
   const ctx = { ...base, projectId: id };
-  const project = await getProject(db, ctx, id);
-  const [register, assignments, logs, services, reminders] = await Promise.all([
-    listEquipment(db, ctx),
-    listAssignments(db, ctx, id),
-    listEquipmentLogs(db, ctx, { projectId: id }),
-    listServices(db, ctx),
-    serviceReminders(db, ctx),
-  ]);
+  const { project, register, assignments, logs, services, reminders } = await withTenant(db, ctx, async (tx) => {
+    const project = await getProject(tx, ctx, id);
+    const [register, assignments, logs, services, reminders] = await Promise.all([
+      listEquipment(tx, ctx),
+      listAssignments(tx, ctx, id),
+      listEquipmentLogs(tx, ctx, { projectId: id }),
+      listServices(tx, ctx),
+      serviceReminders(tx, ctx),
+    ]);
+    return { project, register, assignments, logs, services, reminders };
+  });
   const canManage = ctx.capabilities.includes("equipment.manage");
   const nameOf = new Map(register.map((e) => [e.id, e.name]));
 
   return (
     <>
-      <AppHeader roleLabel="Project" canCapture={ctx.capabilities.includes("report.create")} />
+      <AppHeader roleLabel="Project" canCapture={ctx.capabilities.includes("report.create")} projectName={project.name} />
       <main id="main-content" className="page-shell">
         <p className="eyebrow">Equipment</p>
         <h1 className="page-title">{project.name}</h1>

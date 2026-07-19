@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getDb } from "@buildflow/db/client";
+import { withTenant } from "@buildflow/db/tenant";
 import { currentContext } from "@/app/session";
 import { getProject } from "@buildflow/db/queries/projects";
 import { listRfis } from "@buildflow/db/queries/controls";
@@ -12,13 +13,16 @@ export default async function RfisPage({ params }: { params: Promise<{ id: strin
   const db = await getDb();
   const base = await currentContext();
   const ctx = { ...base, projectId: id };
-  const project = await getProject(db, ctx, id);
-  const rfis = await listRfis(db, ctx, id);
+  const { project, rfis } = await withTenant(db, ctx, async (tx) => {
+    const project = await getProject(tx, ctx, id);
+    const rfis = await listRfis(tx, ctx, id);
+    return { project, rfis };
+  });
   const canManage = ctx.capabilities.includes("rfi.manage");
 
   return (
     <>
-      <AppHeader roleLabel="Project" canCapture={ctx.capabilities.includes("report.create")} />
+      <AppHeader roleLabel="Project" canCapture={ctx.capabilities.includes("report.create")} projectName={project.name} />
       <main id="main-content" className="page-shell">
         <p className="eyebrow">Requests for information</p>
         <h1 className="page-title">{project.name}</h1>
