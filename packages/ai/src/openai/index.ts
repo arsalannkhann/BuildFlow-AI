@@ -1,6 +1,9 @@
 import { dprSchema, type DprStructuredData } from "@buildflow/domain/dpr/schema";
 import type { AiRegistry } from "../registry";
-import type { TranscriptionPort, ExtractionPort, SummaryPort, TranscriptResult } from "../ports";
+import type {
+  TranscriptionPort, ExtractionPort, SummaryPort, TranscriptResult, EmbeddingPort,
+} from "../ports";
+import { EMBEDDING_DIMENSIONS } from "../ports";
 import { OpenAiDocumentExtraction } from "./documents";
 
 const MODEL = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
@@ -67,9 +70,32 @@ class OpenAiSummary implements SummaryPort {
   }
 }
 
+const EMBEDDING_MODEL = process.env.OPENAI_EMBEDDING_MODEL ?? "text-embedding-3-small";
+
+class OpenAiEmbeddings implements EmbeddingPort {
+  readonly meta = { provider: "openai", model: EMBEDDING_MODEL };
+
+  async embed({ texts }: { texts: string[] }): Promise<number[][]> {
+    if (texts.length === 0) return [];
+    const json = await openai("embeddings", { model: EMBEDDING_MODEL, input: texts });
+    const vectors = (json.data ?? [])
+      .sort((a: any, b: any) => a.index - b.index)
+      .map((d: any) => d.embedding as number[]);
+    for (const v of vectors) {
+      // Validate before anything is persisted (rules.md §11): exact dims, finite numbers.
+      if (!Array.isArray(v) || v.length !== EMBEDDING_DIMENSIONS || v.some((n) => !Number.isFinite(n))) {
+        throw new Error("OpenAI embedding response failed validation");
+      }
+    }
+    if (vectors.length !== texts.length) throw new Error("OpenAI embedding count mismatch");
+    return vectors;
+  }
+}
+
 export function openAiRegistry(): AiRegistry {
   return {
     transcription: new OpenAiTranscription(), extraction: new OpenAiExtraction(),
     summary: new OpenAiSummary(), documents: new OpenAiDocumentExtraction(),
+    embeddings: new OpenAiEmbeddings(),
   };
 }

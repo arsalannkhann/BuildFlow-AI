@@ -11,6 +11,7 @@ import {
 import { getCostCode } from "@buildflow/db/queries/budgets";
 import { audit } from "@buildflow/db/queries/audit";
 import { emitEvent } from "@/core/notifications-core";
+import { projectInvoiceDocument } from "@/core/search-core";
 import { enqueueJob } from "@buildflow/jobs/queue";
 import { drainJobs } from "@buildflow/jobs/runner";
 import { pipelineJobRegistry, DOCUMENT_EXTRACT_JOB } from "@buildflow/pipeline/jobs";
@@ -172,6 +173,7 @@ export async function approveInvoice(db: AppDb, ctx: TenantContext, invoiceId: s
     await updateInvoice(tx, ctx, invoiceId, { status: "approved", approvedBy: ctx.userId, approvedAt: new Date() });
     await audit(tx, ctx, { action: "invoice.approved", subjectRef: invoiceId, metadata: { lines: lines.length } });
   });
+  await projectInvoiceDocument(db, ctx, invoiceId); // Phase E3 hook: approved invoice enters search
 }
 
 // Payments are RECORDED against approved invoices — the product never moves money.

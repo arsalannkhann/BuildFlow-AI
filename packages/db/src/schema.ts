@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, integer, timestamp, jsonb, boolean, bigint, doublePrecision, numeric } from "drizzle-orm/pg-core";
+import { pgTable, text, integer, timestamp, jsonb, boolean, bigint, doublePrecision, numeric, vector } from "drizzle-orm/pg-core";
 
 const ts = (name = "created_at") => timestamp(name, { withTimezone: true }).defaultNow().notNull();
 
@@ -754,6 +754,39 @@ export const notificationPreferences = pgTable("notification_preference", {
 });
 
 
+// --- Phase E: search projection (docs/PHASE-E-DESIGN.md) ---
+// Rebuildable projection over source-of-truth records, populated synchronously at
+// approve/post/certify/register points and by the backfill function. NOT a source of
+// truth. Lexical ranking uses the GIN expression index in migration 0009; semantic
+// ranking (pgvector) is real-PostgreSQL-only and degrades explicitly on PGlite
+// (ADR-0002 — queries guard on DATABASE_URL).
+
+export const searchDocuments = pgTable("search_document", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull(),
+  projectId: text("project_id").notNull(),
+  kind: text("kind").notNull(), // report | invoice | receipt | rfi | blocker | mb_entry | document
+  refId: text("ref_id").notNull(), // source record id (unique per org+kind)
+  title: text("title").notNull(),
+  body: text("body").notNull(),
+  // Source record status verbatim — the UI separates approved records from working ones.
+  recordStatus: text("record_status").notNull(),
+  recordDate: text("record_date"), // ISO date for date filters, when the source has one
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+// Embeddings inherit the source record's access and deletion policy (rules.md §14) via
+// the search_document row they attach to. Model recorded per row (rules.md §11).
+export const searchEmbeddings = pgTable("search_embedding", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull(),
+  searchDocumentId: text("search_document_id").notNull().unique(),
+  model: text("model").notNull(),
+  embedding: vector("embedding", { dimensions: 1536 }).notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+
 export const dailyReports = pgTable("daily_report", {
   id: text("id").primaryKey(),
   organizationId: text("organization_id").notNull(),
@@ -886,6 +919,7 @@ export const schema = {
   mbEntries, mbEvidence,
   rfqs, rfqItems, rfqQuotes, purchaseOrders, poLines,
   notifications, notificationDeliveries, notificationPreferences,
+  searchDocuments, searchEmbeddings,
   dailyReports, reportRevisions,
   attachments, evidenceLinks, processingRuns, processingStages, reviewDecisions,
   issuedDocuments, auditEvents,

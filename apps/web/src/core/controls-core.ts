@@ -14,6 +14,9 @@ import {
 import { getReport, listReports } from "@buildflow/db/queries/reports";
 import { audit } from "@buildflow/db/queries/audit";
 import { emitEvent } from "@/core/notifications-core";
+import {
+  projectBlockerDocument, projectDrawingDocument, projectRfiDocument,
+} from "@/core/search-core";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const assertDate = (v: string | null | undefined, label: string) => {
@@ -125,6 +128,7 @@ export async function raiseBlocker(db: AppDb, ctx: TenantContext, input: {
   await audit(db, ctx, { action: "blocker.raised", subjectRef: row.id, metadata: { severity: row.severity } });
   // Phase E1 hook: blocker owners hear about new blockers (title + severity only).
   await emitEvent(db, ctx, { eventKind: "blocker.raised", subjectRef: row.id, projectId: input.projectId, title: `Blocker raised: ${row.title}`, body: `Severity: ${row.severity}` });
+  await projectBlockerDocument(db, ctx, row.id); // Phase E3 hook
   return row.id;
 }
 
@@ -138,6 +142,7 @@ export async function resolveBlocker(db: AppDb, ctx: TenantContext, blockerId: s
     status: "resolved", resolutionNote: resolutionNote.trim(), resolvedAt: new Date(),
   });
   await audit(db, ctx, { action: "blocker.resolved", subjectRef: blockerId, metadata: {} });
+  await projectBlockerDocument(db, ctx, blockerId); // Phase E3 hook: status + note re-projected
 }
 
 export async function updateBlockerDetails(db: AppDb, ctx: TenantContext, blockerId: string, patch: {
@@ -160,6 +165,7 @@ export async function createRfi(db: AppDb, ctx: TenantContext, input: {
   assertDate(input.dueDate, "Due date");
   const row = await addRfi(db, ctx, { ...input, subject: input.subject.trim(), question: input.question.trim() });
   await audit(db, ctx, { action: "rfi.created", subjectRef: row.id, metadata: { number: row.number } });
+  await projectRfiDocument(db, ctx, row.id); // Phase E3 hook
   return row.id;
 }
 
@@ -202,6 +208,7 @@ export async function registerDocument(db: AppDb, ctx: TenantContext, input: {
   }
   const row = await addDocument(db, ctx, { ...input, title: input.title.trim() });
   await audit(db, ctx, { action: "document.registered", subjectRef: row.id, metadata: { category: row.category } });
+  await projectDrawingDocument(db, ctx, row.id); // Phase E3 hook
   return row.id;
 }
 
@@ -224,6 +231,7 @@ export async function uploadDocumentRevision(db: AppDb, ctx: TenantContext, stor
     documentId: doc.id, revisionLabel: input.revisionLabel.trim(), notes: input.notes, file,
   });
   await audit(db, ctx, { action: "document.revision_added", subjectRef: doc.id, metadata: { revisionId: rev.id, label: rev.revisionLabel } });
+  await projectDrawingDocument(db, ctx, doc.id); // Phase E3 hook: latest revision notes searchable
 }
 
 // --- overview + explainable delay indicators ---

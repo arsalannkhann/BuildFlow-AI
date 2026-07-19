@@ -12,6 +12,7 @@ import {
 } from "@buildflow/db/queries/mb";
 import { audit } from "@buildflow/db/queries/audit";
 import { emitEvent } from "@/core/notifications-core";
+import { projectMbDocument } from "@/core/search-core";
 
 // Measurement Book (e-MB Preview) — NOT legally authoritative (memory.md: pending legal
 // review; rules.md §11: AI may never finalize an MB entry — every transition here is a
@@ -119,6 +120,7 @@ export async function certifyMbEntry(db: AppDb, ctx: TenantContext, entryId: str
   if (entry.status !== "verified") throw new Error("Only verified entries can be certified");
   await updateMbEntry(db, ctx, entryId, { status: "certified", certifiedBy: ctx.userId, certifiedAt: new Date() });
   await audit(db, ctx, { action: "mb.entry_certified", subjectRef: entryId, metadata: { mbNumber: entry.mbNumber } });
+  await projectMbDocument(db, ctx, entryId); // Phase E3 hook: certified entry enters search
 }
 
 /**

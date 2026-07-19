@@ -13,6 +13,7 @@ import { audit } from "@buildflow/db/queries/audit";
 import { renderDprPdf, TEMPLATE_VERSION } from "@buildflow/pdf/render";
 import type { DprStructuredData } from "@buildflow/domain/dpr/schema";
 import { emitEvent } from "@/core/notifications-core";
+import { projectReportDocument } from "@/core/search-core";
 
 export async function approveReport(db: AppDb, ctx: TenantContext, reportId: string): Promise<void> {
   assertCan(ctx, "report.approve");
@@ -21,6 +22,7 @@ export async function approveReport(db: AppDb, ctx: TenantContext, reportId: str
   await audit(db, ctx, { action: "report.approved", subjectRef: reportId });
   const report = await getReport(db, ctx, reportId); // Phase E1 hook: field team learns the outcome
   await emitEvent(db, ctx, { eventKind: "report.approved", subjectRef: reportId, projectId: report.projectId, title: `DPR ${report.reportDate} approved` });
+  await projectReportDocument(db, ctx, reportId); // Phase E3 hook: approved record enters search
 }
 
 export async function requestChanges(db: AppDb, ctx: TenantContext, reportId: string, reason: string): Promise<void> {

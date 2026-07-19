@@ -1,5 +1,6 @@
 import { join, isAbsolute } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
+import { vector as pgliteVector } from "@electric-sql/pglite/vector";
 import { drizzle as drizzlePglite } from "drizzle-orm/pglite";
 import { migrate as migratePglite } from "drizzle-orm/pglite/migrator";
 import pg from "pg";
@@ -28,7 +29,9 @@ export async function createDb(dataDir?: string): Promise<AppDb> {
   }
   const configured = dataDir ?? process.env.PGLITE_DATA_DIR ?? ".pglite";
   const resolved = isAbsolute(configured) ? configured : join(workspaceRoot(), configured);
-  const pglite = new PGlite(resolved);
+  // pgvector ships inside PGlite; migration 0009 CREATEs the extension. Real PG images
+  // (docker-compose, CI, Supabase) are pgvector-enabled already.
+  const pglite = new PGlite(resolved, { extensions: { vector: pgliteVector } });
   const db = drizzlePglite(pglite, { schema });
   await migratePglite(db, { migrationsFolder: migrationsDir() });
   return db as unknown as AppDb;
@@ -48,7 +51,7 @@ export function getDb(): Promise<AppDb> {
 }
 
 export async function createTestDb(): Promise<AppDb> {
-  const pglite = new PGlite(); // in-memory
+  const pglite = new PGlite({ extensions: { vector: pgliteVector } }); // in-memory
   const db = drizzlePglite(pglite, { schema });
   await migratePglite(db, { migrationsFolder: migrationsDir() });
   return db as unknown as AppDb;

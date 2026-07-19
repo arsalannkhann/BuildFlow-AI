@@ -36,6 +36,7 @@ export function AppHeader({
         <nav className="app-header__nav" aria-label="Primary navigation">
           <Link href="/reports">Reports</Link>
           <Link href="/projects">Projects</Link>
+          <Link href="/search">Search</Link>
           <Link href="/organization">Organization</Link>
           <HeaderStatus />
           {canCapture && (

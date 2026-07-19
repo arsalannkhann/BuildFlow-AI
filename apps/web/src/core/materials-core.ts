@@ -12,6 +12,7 @@ import {
 } from "@buildflow/db/queries/materials";
 import { audit } from "@buildflow/db/queries/audit";
 import { emitShortageIfBelow } from "@/core/notifications-core";
+import { projectReceiptDocument } from "@/core/search-core";
 import { enqueueJob } from "@buildflow/jobs/queue";
 import { drainJobs } from "@buildflow/jobs/runner";
 import { pipelineJobRegistry, DOCUMENT_EXTRACT_JOB } from "@buildflow/pipeline/jobs";
@@ -214,6 +215,7 @@ export async function postReceipt(db: AppDb, ctx: TenantContext, receiptId: stri
     await updateReceipt(tx, ctx, receiptId, { status: "posted", postedBy: ctx.userId, postedAt: new Date() });
     await audit(tx, ctx, { action: "material.receipt_posted", subjectRef: receiptId, metadata: { lines: lines.length } });
   });
+  await projectReceiptDocument(db, ctx, receiptId); // Phase E3 hook: posted challan enters search
 }
 
 // Manual ledger movements (issue to works, consumption, count adjustment, return).
