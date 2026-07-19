@@ -37,6 +37,7 @@ export function AppHeader({
           <Link href="/reports">Reports</Link>
           <Link href="/projects">Projects</Link>
           <Link href="/search">Search</Link>
+          <Link href="/assistant">Assistant</Link>
           <Link href="/organization">Organization</Link>
           <HeaderStatus />
           {canCapture && (

@@ -5,4 +5,6 @@ test("defaults to mock provider with no env", () => {
   delete process.env.AI_PROVIDER;
   const reg = getAiRegistry();
   expect(reg.extraction.meta.provider).toBe("mock");
+  expect(reg.grounded.meta.provider).toBe("mock");
+  expect(reg.grounded.meta.promptVersion).toBe("grounded-answer.v1");
 });

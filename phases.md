@@ -43,11 +43,15 @@ productivity, equipment register + reminders, Measurement Book (e-MB Preview) wi
 append-only certification flow, budgets/cost codes/EAC/variance, INR/GST formatting,
 CSV/JSON exports.
 
-### Phase E — intelligence and compliance
+### Phase E — intelligence and compliance — completed 2026-07-19
 Portfolio exceptions dashboard, org/project-scoped search (FTS + `pgvector`), grounded
 assistant (citations, approved-vs-draft distinction, refusal on insufficient evidence, no
 mutations), notifications (in-app/email/WhatsApp adapters, preferences, delivery status),
 compliance evidence packs (DPCC/GRAP/RERA) with checklists and versioned exports.
+
+Exit gate passed: E1–E5 are implemented with capability enforcement, RLS migrations,
+cross-tenant and grounding tests, immutable export checksums, typecheck, and production build.
+Phase F is the active engineering phase.
 
 ### Phase F — production hardening
 Localization (en/hi), accessibility (WCAG 2.2 AA), performance, observability, retention/

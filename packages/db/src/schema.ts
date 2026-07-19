@@ -787,6 +787,61 @@ export const searchEmbeddings = pgTable("search_embedding", {
 });
 
 
+// --- Phase E: compliance evidence packs (docs/PHASE-E-DESIGN.md) ---
+// These rows organize evidence and human review. They never represent regulator
+// submission or legal certification; every pack carries an explicit caution.
+
+export const compliancePacks = pgTable("compliance_pack", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull(),
+  projectId: text("project_id").notNull(),
+  kind: text("kind").notNull(), // dpcc_dust | grap | rera_quarterly | custom
+  title: text("title").notNull(),
+  periodStart: text("period_start").notNull(),
+  periodEnd: text("period_end").notNull(),
+  status: text("status").notNull().default("draft"), // draft | in_review | reviewed | exported
+  legalCaution: text("legal_caution").notNull(),
+  reviewedBy: text("reviewed_by"),
+  reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+  createdBy: text("created_by").notNull(),
+  createdAt: ts(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const complianceRequirements = pgTable("compliance_requirement", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull(),
+  packId: text("pack_id").notNull(),
+  requirementText: text("requirement_text").notNull(),
+  ownerName: text("owner_name"),
+  dueDate: text("due_date"),
+  status: text("status").notNull().default("pending"), // pending | satisfied | not_applicable
+  satisfiedByKind: text("satisfied_by_kind"), // report | attachment | document | mb_entry | note
+  satisfiedByRef: text("satisfied_by_ref"),
+  note: text("note"),
+  satisfiedBy: text("satisfied_by"),
+  satisfiedAt: timestamp("satisfied_at", { withTimezone: true }),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: ts(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+// Append-only immutable export registry. The storage object and checksum are never
+// updated; repeated exports create the next version.
+export const complianceExports = pgTable("compliance_export", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull(),
+  projectId: text("project_id").notNull(),
+  packId: text("pack_id").notNull(),
+  version: integer("version").notNull(),
+  objectKey: text("object_key").notNull(),
+  checksum: text("checksum").notNull(),
+  byteSize: bigint("byte_size", { mode: "number" }).notNull(),
+  createdBy: text("created_by").notNull(),
+  createdAt: ts(),
+});
+
+
 export const dailyReports = pgTable("daily_report", {
   id: text("id").primaryKey(),
   organizationId: text("organization_id").notNull(),
@@ -920,6 +975,7 @@ export const schema = {
   rfqs, rfqItems, rfqQuotes, purchaseOrders, poLines,
   notifications, notificationDeliveries, notificationPreferences,
   searchDocuments, searchEmbeddings,
+  compliancePacks, complianceRequirements, complianceExports,
   dailyReports, reportRevisions,
   attachments, evidenceLinks, processingRuns, processingStages, reviewDecisions,
   issuedDocuments, auditEvents,

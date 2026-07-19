@@ -1,8 +1,9 @@
 # Phase E design — intelligence, notifications, compliance
 
-**Date:** 2026-07-19 · Working design for portfolio dashboard, search + grounded assistant,
-notifications, and compliance evidence packs. Follows the conventions in memory.md §14 and
-rules.md §11 (AI), §14 (privacy), §16 (observability).
+**Date:** 2026-07-19 · **Status: implemented (E1–E5).** Design and implementation record for
+portfolio dashboard, search + grounded assistant, notifications, and compliance evidence
+packs. Follows the conventions in memory.md §14 and rules.md §11 (AI), §14 (privacy),
+§16 (observability).
 
 ## Notifications and external sharing
 
@@ -63,7 +64,7 @@ server-rendered, `org.audit.read` OR `project.read` scoping (users see only thei
      citations — no LLM required, always exact;
   3. free-text questions: retrieve top-k search_documents (lexical + vector), then
      `GroundedAnswerPort` (mock: extractive answer listing sources; OpenAI: structured
-     output `{answer, citations[], confidence, insufficient_evidence}`) — prompt forbids
+     output `{answer, citations[], insufficient_evidence}`) — prompt forbids
      invented numbers; server rejects answers whose citations reference records outside
      the user's scope; UI renders citations as links and shows "Not enough evidence" when
      flagged. Assistant NEVER mutates records (read-only core, no action imports).
@@ -92,3 +93,16 @@ E2 portfolio dashboard → E3 search projection + embeddings + /search →
 E4 assistant → E5 compliance packs + exports. RLS + capability checks + audit + tests per
 the Phase B pattern (`compliance.manage`/`compliance.review` caps exist; notifications use
 recipient scoping; assistant/search use project.read).
+
+## Implementation record
+
+- E1: migration `0008`, notification event catalog, local email/WhatsApp adapters,
+  delivery jobs, bell/inbox/preferences, and event hooks.
+- E2: exception-first `/portfolio` aggregation with membership-aware project scope.
+- E3: migration `0009`, rebuildable search projection, lexical/semantic adapters,
+  source-status labeling, and tenant filtering before ranking.
+- E4: read-only `/assistant`, deterministic SQL intents, permission-filtered grounded
+  fallback, versioned grounding prompt, strict output schema, citations, and refusal state.
+- E5: migration `0010`, templates, evidence validation, due warnings, capability-gated
+  draft → review → reviewed workflow, immutable versioned ZIP registry/downloads, and
+  DRAFT/REVIEWED cover PDFs. There is deliberately no regulator submission integration.

@@ -23,14 +23,15 @@ BuildFlow AI is an India-first construction operations product. Its initial wedg
 
 ## 3. Current phase
 
-**Current engineering phase:** Phase A — foundation and migration (of the Phase A–F complete
-MVP plan in `phases.md` §0, decided 2026-07-19).  
+**Current engineering phase:** Phase F — production hardening (of the Phase A–F complete
+MVP plan in `phases.md` §0, decided 2026-07-19). Phases A–E are implemented.
 **Commercial phase:** Phase 0 — field discovery and design partners (unchanged; runs in
 parallel and does not gate engineering).
 
 The DPR vertical slice was built and audited first (2026-07-13 → 2026-07-19; see
-`docs/GAP-ANALYSIS.md`): typecheck, 36 unit/integration tests, Playwright e2e, and the
-production build all pass. Engineering now expands it into the complete MVP.
+`docs/GAP-ANALYSIS.md`), then expanded through project controls, commercial operations,
+notifications, portfolio/search, a cited read-only assistant, and compliance evidence packs.
+The repository-wide suite now covers 146 unit/integration tests; production hardening is next.
 
 ## 4. Current product decision
 
@@ -49,11 +50,10 @@ production build all pass. Engineering now expands it into the complete MVP.
 - Full ERP.
 - Computer-vision progress percentage.
 - Face attendance.
-- Automated procurement, payment, scheduling, or compliance submission.
+- Automated procurement, payment, scheduling, or government compliance submission.
 - Legally authoritative e-MB.
-- Equipment maintenance.
-- Budget forecasting.
-- General portfolio chatbot.
+- Predictive equipment maintenance or budget forecasting.
+- An uncited general-purpose portfolio chatbot.
 - Neo4j/knowledge graph.
 - Autonomous agents.
 
@@ -154,6 +154,29 @@ The source roadmap discusses RERA, DPCC Dust Portal, GRAP, Measurement Books, Ta
 - Derived AI artifacts inherit the source record’s access and deletion policy.
 
 ## 14. Decision log
+
+### 2026-07-19 — Phase E landed: intelligence, notifications, and compliance evidence
+
+**What:** E1 notification event catalog, recipient resolution, in-app inbox/bell,
+email/WhatsApp provider ports, delivery retry/dead-letter status, and per-user preferences;
+E2 exception-first portfolio rollups; E3 rebuildable search projection with tenant filtering
+before lexical/semantic ranking and explicit working-vs-approved labels; E4 read-only project
+assistant with deterministic SQL answers for canonical operational questions, permission-
+filtered grounded fallback, a versioned injection-resistant prompt, strict structured output,
+server-revalidated citations, and an insufficient-evidence refusal; E5 operational compliance
+evidence packs for dust controls, GRAP readiness, quarterly updates, and custom workflows.
+**Compliance boundary:** template wording is jurisdiction-neutral and carries a legal caution;
+requirements accept only approved/certified same-project evidence (or an explicit note/N/A
+reason); submission locks the checklist for `compliance.review`; exports are immutable,
+checksum-addressed ZIP versions containing a manifest, CSV, DRAFT/REVIEWED cover PDF, and
+source evidence. BuildFlow does not submit to a government portal or guarantee compliance.
+**Migrations:** 0008 notifications, 0009 search/pgvector, 0010 compliance packs/requirements/
+exports with FORCE RLS and immutable version uniqueness.
+**UI:** `/portfolio`, `/search`, `/assistant`, `/notifications`, account preferences, and
+project compliance register/detail/download routes; assistant and compliance surfaces are
+responsive, source-forward, and explicit about read-only/draft states.
+**Verification:** 50 test files / 146 tests, cross-tenant denials, typecheck, and production
+build pass. Phase F production hardening is next.
 
 ### 2026-07-19 — Phase D landed: commercial operations
 

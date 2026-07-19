@@ -2,8 +2,14 @@ import { dprSchema, type DprStructuredData } from "@buildflow/domain/dpr/schema"
 import type { AiRegistry } from "../registry";
 import type {
   TranscriptionPort, ExtractionPort, SummaryPort, TranscriptResult, EmbeddingPort,
+  GroundedAnswerPort, GroundedAnswer, GroundedPassage,
 } from "../ports";
 import { EMBEDDING_DIMENSIONS } from "../ports";
+import { groundedAnswerSchema } from "../grounded/schema";
+import {
+  GROUNDED_ANSWER_PROMPT_VERSION,
+  GROUNDED_ANSWER_SYSTEM_PROMPT,
+} from "../grounded/prompt";
 import { OpenAiDocumentExtraction } from "./documents";
 
 const MODEL = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
@@ -92,10 +98,29 @@ class OpenAiEmbeddings implements EmbeddingPort {
   }
 }
 
+class OpenAiGroundedAnswer implements GroundedAnswerPort {
+  readonly meta = { provider: "openai", model: MODEL, promptVersion: GROUNDED_ANSWER_PROMPT_VERSION };
+
+  async answer({ question, passages }: {
+    question: string; passages: GroundedPassage[];
+  }): Promise<GroundedAnswer> {
+    const json = await openai("chat/completions", {
+      model: MODEL,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: GROUNDED_ANSWER_SYSTEM_PROMPT },
+        { role: "user", content: JSON.stringify({ question, passages }) },
+      ],
+    });
+    // Strict schema gate before anything is rendered (rules.md §11).
+    return groundedAnswerSchema.parse(JSON.parse(json.choices[0].message.content));
+  }
+}
+
 export function openAiRegistry(): AiRegistry {
   return {
     transcription: new OpenAiTranscription(), extraction: new OpenAiExtraction(),
     summary: new OpenAiSummary(), documents: new OpenAiDocumentExtraction(),
-    embeddings: new OpenAiEmbeddings(),
+    embeddings: new OpenAiEmbeddings(), grounded: new OpenAiGroundedAnswer(),
   };
 }

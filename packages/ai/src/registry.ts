@@ -3,9 +3,11 @@ import { MockExtraction } from "./mock/extraction";
 import { MockSummary } from "./mock/summary";
 import { MockDocumentExtraction } from "./mock/documents";
 import { MockEmbeddings } from "./mock/embeddings";
+import { MockGroundedAnswer } from "./mock/grounded";
 import { openAiRegistry } from "./openai/index";
 import type {
   TranscriptionPort, ExtractionPort, SummaryPort, DocumentExtractionPort, EmbeddingPort,
+  GroundedAnswerPort,
 } from "./ports";
 
 export type AiRegistry = {
@@ -14,6 +16,7 @@ export type AiRegistry = {
   summary: SummaryPort;
   documents: DocumentExtractionPort;
   embeddings: EmbeddingPort;
+  grounded: GroundedAnswerPort;
 };
 
 export function getAiRegistry(): AiRegistry {
@@ -23,7 +26,7 @@ export function getAiRegistry(): AiRegistry {
     return {
       transcription: new MockTranscription(), extraction: new MockExtraction(),
       summary: new MockSummary(), documents: new MockDocumentExtraction(),
-      embeddings: new MockEmbeddings(),
+      embeddings: new MockEmbeddings(), grounded: new MockGroundedAnswer(),
     };
   }
   // A typo must never silently downgrade production to the mock (rules.md §15).

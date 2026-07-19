@@ -91,19 +91,26 @@ The capture action remains prominent on **Today** and project screens; do not us
 
 - Portfolio
 - Projects
-- Review inbox
 - Reports
-- People
-- Organization settings
+- Search
+- Assistant (read-only and cited)
+- Organization
+- Notifications and account
 
 Future modules do not appear as empty navigation items.
 
 ### Project sub-navigation
 
 - Overview
-- Daily reports
+- Schedule
 - Blockers
+- RFIs
 - Documents
+- Materials and procurement
+- Labour and equipment
+- Measurement Book (e-MB Preview)
+- Budget
+- Compliance evidence
 - Settings, when permitted
 
 ## 6. Core mobile flow
