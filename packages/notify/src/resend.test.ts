@@ -29,3 +29,22 @@ test("missing key fails fast at construction", () => {
   delete process.env.RESEND_API_KEY;
   expect(() => new ResendEmail()).toThrow(/RESEND_API_KEY/);
 });
+
+test("html part is forwarded when provided and escaped by the renderer", async () => {
+  const calls: { init: RequestInit }[] = [];
+  const fetchFn = (async (_u: unknown, init: unknown) => {
+    calls.push({ init: init as RequestInit });
+    return new Response(JSON.stringify({ id: "e" }), { status: 200 });
+  }) as typeof fetch;
+  const { renderBrandedEmail } = await import("./template");
+  const html = renderBrandedEmail({
+    previewText: "p", title: "<script>alert(1)</script>", body: "b",
+    ctaUrl: "https://x.test/r/1", ctaLabel: "Go", validityNote: "v",
+  });
+  expect(html).not.toContain("<script>");
+  expect(html).toContain("&lt;script&gt;");
+  const adapter = new (await import("./resend")).ResendEmail({ apiKey: "k", fetchFn });
+  await adapter.send({ to: "a@b.c", subject: "s", text: "t", html });
+  const body = JSON.parse(String(calls[0].init.body));
+  expect(body.html).toContain("BuildFlow");
+});

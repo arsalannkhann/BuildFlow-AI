@@ -177,16 +177,26 @@ export async function requestPasswordResetAction(formData: FormData): Promise<vo
       const host = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host") ?? "localhost:3000";
       try {
         const { getNotifyRegistry } = await import("@buildflow/notify/registry");
+        const { renderBrandedEmail } = await import("@buildflow/notify/template");
+        const resetUrl = `${proto}://${host}/reset/${reset.token}`;
         await getNotifyRegistry().email.send({
           to: email,
           subject: "Reset your BuildFlow password",
           text: [
             "Someone requested a password reset for your BuildFlow account.",
             "",
-            `Reset link (valid for 30 minutes, single use): ${proto}://${host}/reset/${reset.token}`,
+            `Reset link (valid for 30 minutes, single use): ${resetUrl}`,
             "",
             "If you did not request this, you can ignore this email; your password is unchanged.",
           ].join("\n"),
+          html: renderBrandedEmail({
+            previewText: "Set a new BuildFlow password — link valid for 30 minutes.",
+            title: "Reset your BuildFlow password",
+            body: "Someone requested a password reset for your account. Use the button below to choose a new password. All signed-in devices are signed out after the change.",
+            ctaUrl: resetUrl,
+            ctaLabel: "Set a new password",
+            validityNote: "This link works once and expires in 30 minutes. If you did not request it, ignore this email; your password is unchanged.",
+          }),
         });
       } catch {
         console.error("password-reset email dispatch failed"); // no address/token in logs

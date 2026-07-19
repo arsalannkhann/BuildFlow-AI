@@ -5,6 +5,7 @@ import {
   getDelivery, getNotification, getUser, updateDelivery,
 } from "@buildflow/db/queries/notifications";
 import { getNotifyRegistry } from "./registry";
+import { renderBrandedEmail } from "./template";
 import type { NotifyRegistry } from "./ports";
 
 // Matches enqueueJob's default maxAttempts; when the job dead-letters, the delivery row
@@ -37,8 +38,17 @@ export async function deliverNotification(
   try {
     let providerMessageId: string;
     if (delivery.channel === "email") {
+      const appUrl = (process.env.APP_BASE_URL ?? "http://localhost:3000").replace(/\/+$/, "");
+      const html = renderBrandedEmail({
+        previewText: notification.title,
+        title: notification.title,
+        body: notification.body ?? "Open BuildFlow to see the full record.",
+        ctaUrl: `${appUrl}/notifications`,
+        ctaLabel: "Open BuildFlow",
+        validityNote: "You receive these because of your notification preferences (Account page).",
+      });
       const res = await registry.email.send({
-        to: user.email ?? user.id, subject: notification.title, text,
+        to: user.email ?? user.id, subject: notification.title, text, html,
       });
       providerMessageId = res.providerMessageId;
     } else if (delivery.channel === "whatsapp") {

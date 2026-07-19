@@ -5,7 +5,10 @@
 export type EmailMessage = {
   to: string;
   subject: string;
+  /** Plain-text part — always present so every client has a readable fallback. */
   text: string;
+  /** Optional branded HTML part (renderBrandedEmail). */
+  html?: string;
 };
 
 export interface EmailPort {

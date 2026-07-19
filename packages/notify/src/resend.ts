@@ -30,6 +30,7 @@ export class ResendEmail implements EmailPort {
         to: [message.to],
         subject: message.subject,
         text: message.text,
+        ...(message.html ? { html: message.html } : {}),
       }),
       signal: AbortSignal.timeout(15_000),
     });

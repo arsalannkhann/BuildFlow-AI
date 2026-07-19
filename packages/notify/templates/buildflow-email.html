@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en" xmlns:v="urn:schemas-microsoft-com:vml">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="supported-color-schemes" content="light">
+  <title>BuildFlow</title>
+  <!--[if mso]>
+  <noscript><xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml></noscript>
+  <![endif]-->
+  <style>
+    /* Client-safe resets; everything load-bearing is inlined below. */
+    body { margin: 0; padding: 0; -webkit-text-size-adjust: 100%; }
+    table { border-collapse: collapse; }
+    img { border: 0; line-height: 100%; }
+    @media only screen and (max-width: 620px) {
+      .bf-container { width: 100% !important; }
+      .bf-card-pad { padding: 24px 20px !important; }
+      .bf-header-pad { padding: 20px 20px !important; }
+    }
+  </style>
+</head>
+<body style="margin:0; padding:0; background-color:#F3F4F6;">
+  <!-- Preheader: shown in inbox preview, hidden in the message -->
+  <div style="display:none; max-height:0; overflow:hidden; mso-hide:all;">
+    {{{preview_text}}}
+  </div>
+
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#F3F4F6;">
+    <tr>
+      <td align="center" style="padding:32px 12px;">
+
+        <table role="presentation" class="bf-container" width="600" cellpadding="0" cellspacing="0" style="width:600px; max-width:600px;">
+
+          <!-- Brand band -->
+          <tr>
+            <td class="bf-header-pad" style="background-color:#102A43; border-radius:14px 14px 0 0; padding:24px 32px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td style="font-family:Inter,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+                    <span style="display:inline-block; vertical-align:middle; width:10px; height:22px; background-color:#A84812; border-radius:3px;">&nbsp;</span>
+                    <span style="display:inline-block; vertical-align:middle; width:10px; height:14px; background-color:#DCEAF2; border-radius:3px; margin-left:3px;">&nbsp;</span>
+                    <span style="font-size:20px; font-weight:700; color:#FFFFFF; letter-spacing:-0.01em; margin-left:10px; vertical-align:middle;">BuildFlow</span>
+                    <span style="font-size:12px; color:#9FB3C8; margin-left:8px; vertical-align:middle;">Site reports, simplified</span>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Card -->
+          <tr>
+            <td class="bf-card-pad" style="background-color:#FFFFFF; border:1px solid #E5E7EB; border-top:0; border-radius:0 0 14px 14px; padding:32px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+
+                <tr>
+                  <td style="font-family:Inter,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:22px; line-height:30px; font-weight:700; color:#111827; padding-bottom:12px;">
+                    {{{title}}}
+                  </td>
+                </tr>
+
+                <tr>
+                  <td style="font-family:Inter,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:16px; line-height:25px; color:#374151; padding-bottom:28px;">
+                    {{{body}}}
+                  </td>
+                </tr>
+
+                <!-- Bulletproof CTA -->
+                <tr>
+                  <td align="left" style="padding-bottom:28px;">
+                    <!--[if mso]>
+                    <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" href="{{{cta_url}}}" style="height:48px;v-text-anchor:middle;width:260px;" arcsize="21%" fillcolor="#A84812" stroke="f">
+                      <center style="color:#FFFFFF;font-family:Arial,sans-serif;font-size:16px;font-weight:700;">{{{cta_label}}}</center>
+                    </v:roundrect>
+                    <![endif]-->
+                    <!--[if !mso]><!-->
+                    <a href="{{{cta_url}}}"
+                       style="display:inline-block; background-color:#A84812; color:#FFFFFF; font-family:Inter,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:16px; font-weight:700; line-height:48px; padding:0 32px; border-radius:10px; text-decoration:none;">
+                      {{{cta_label}}}
+                    </a>
+                    <!--<![endif]-->
+                  </td>
+                </tr>
+
+                <!-- Fallback link + validity note -->
+                <tr>
+                  <td style="font-family:Inter,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:13px; line-height:20px; color:#4B5563; border-top:1px solid #E5E7EB; padding-top:20px;">
+                    If the button doesn't work, copy this link into your browser:<br>
+                    <a href="{{{cta_url}}}" style="color:#1F4E6D; word-break:break-all;">{{{cta_url}}}</a>
+                    <br><br>
+                    {{{validity_note}}}
+                  </td>
+                </tr>
+
+              </table>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="font-family:Inter,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:12px; line-height:18px; color:#6B7280; text-align:center; padding:20px 24px 0;">
+              Sent by BuildFlow for {{{org_name}}}.<br>
+              If you didn't request this, you can safely ignore this email — nothing changes without the link above.
+            </td>
+          </tr>
+
+        </table>
+
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
