@@ -7,6 +7,8 @@ const TABS = [
   { slug: "rfis", label: "RFIs" },
   { slug: "documents", label: "Documents" },
   { slug: "materials", label: "Materials" },
+  { slug: "labour", label: "Labour" },
+  { slug: "equipment", label: "Equipment" },
   { slug: "budget", label: "Budget" },
   { slug: "admin", label: "Settings" },
 ] as const;
