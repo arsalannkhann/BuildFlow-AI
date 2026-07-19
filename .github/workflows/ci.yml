@@ -1,13 +1,18 @@
-name: CI
+name: CI/CD
 
 on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   checks:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -18,11 +23,14 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm secrets:scan
       - run: pnpm typecheck
+      - name: Install PDF browser runtime
+        run: pnpm --filter @buildflow/pdf exec playwright install --with-deps chromium
       - run: pnpm test
       - run: pnpm build
 
   e2e:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -37,6 +45,7 @@ jobs:
   real-postgres:
     # Verifies migrations (including RLS) apply against real PostgreSQL, not only PGlite.
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     services:
       postgres:
         image: pgvector/pgvector:pg16
@@ -64,6 +73,7 @@ jobs:
 
   mobile:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -74,3 +84,54 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @buildflow/mobile typecheck
       - run: pnpm vitest run apps/mobile/src/lib/sync
+
+  deploy-production:
+    name: Deploy production
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: [checks, e2e, real-postgres, mobile]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    concurrency:
+      group: buildflow-production
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    environment:
+      name: production
+      url: ${{ steps.deploy.outputs.web_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate deployment configuration
+        env:
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          GCP_REGION: ${{ vars.GCP_REGION }}
+          GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          GCP_DEPLOY_SERVICE_ACCOUNT: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+        run: |
+          : "${GCP_PROJECT_ID:?Missing GCP_PROJECT_ID repository variable}"
+          : "${GCP_REGION:?Missing GCP_REGION repository variable}"
+          : "${GCP_WORKLOAD_IDENTITY_PROVIDER:?Missing GCP_WORKLOAD_IDENTITY_PROVIDER repository variable}"
+          : "${GCP_DEPLOY_SERVICE_ACCOUNT:?Missing GCP_DEPLOY_SERVICE_ACCOUNT repository variable}"
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+
+      - name: Set up Google Cloud CLI
+        uses: google-github-actions/setup-gcloud@v3
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          version: ">= 550.0.0"
+
+      - name: Build, migrate, deploy, and smoke test
+        id: deploy
+        env:
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          GCP_REGION: ${{ vars.GCP_REGION }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: ./infrastructure/gcp/deploy.sh

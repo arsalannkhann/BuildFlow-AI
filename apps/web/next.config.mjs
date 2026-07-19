@@ -1,6 +1,20 @@
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const appDir = dirname(fileURLToPath(import.meta.url));
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  serverExternalPackages: ["@electric-sql/pglite", "playwright"],
+  output: "standalone",
+  // Next defaults output tracing to apps/web. Provider and database packages are installed at
+  // the pnpm workspace root, so production standalone images must trace from the monorepo root.
+  outputFileTracingRoot: join(appDir, "../.."),
+  serverExternalPackages: [
+    "@electric-sql/pglite",
+    "@google-cloud/storage",
+    "@google/genai",
+    "playwright",
+  ],
   transpilePackages: [
     "@buildflow/ai",
     "@buildflow/auth",
@@ -20,7 +34,6 @@ const nextConfig = {
         playwright: "commonjs playwright",
         "playwright-core": "commonjs playwright-core",
         "@electric-sql/pglite": "commonjs @electric-sql/pglite",
-        pg: "commonjs pg",
       });
     }
     return config;
