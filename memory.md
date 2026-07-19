@@ -155,6 +155,35 @@ The source roadmap discusses RERA, DPCC Dust Portal, GRAP, Measurement Books, Ta
 
 ## 14. Decision log
 
+### 2026-07-19 — Phase D landed: commercial operations
+
+**What:** materials catalogue + suppliers + challan receipts with OCR review queue and an
+append-only stock ledger (posting a reviewed receipt applies stock exactly once via a
+partial unique on ledger source refs; deterministic shortage alerts on the overview);
+invoices (OCR draft → human review → approval posts cost entries exactly once), cost
+codes, immutable budget versions with CSV import, committed/invoiced/paid rollups, and
+deterministic EAC with the formula string shown beside every figure (INR paise +
+Indian-grouped `formatINR`); labour contractors + daily attendance TOTALS (no individual
+identities) with a deterministic productivity join vs approved-DPR quantities; equipment
+register/assignments/append-only logs + rule-named service reminders (due-date window OR
+cumulative hours); Measurement Book (e-MB Preview) with server-computed quantities
+(`packages/domain/src/mb/calc.ts`, mismatches refused), draft→submitted→verified|rejected→
+certified gates (`mb.create/verify/certify`), append-only corrections
+(corrects_entry_id/superseded_by), geotagged evidence, MB-register + RA-bill CSVs; RFQ →
+manual quotes → comparison → PO draft → approved (`procurement.approve`) → manual CSV/JSON
+export for later Tally import — POs are never sent automatically.
+**OCR:** `DocumentExtractionPort` (extractChallan/extractInvoice) in packages/ai with
+zod-versioned `challan.v1`/`invoice.v1` (per-field confidence bands, null when unsupported),
+deterministic mock + OpenAI vision behind `AI_PROVIDER`; `document.extract` job lands DRAFT
+lines only — nothing touches stock or costs before a capability-gated human acts.
+**Migration:** 0007 (26 tables, FORCE RLS on all, exactly-once partial uniques on
+stock/cost source refs, per-project sequence uniques for MB and PO numbers).
+**UI:** ProjectNav gains Materials/Procurement/Labour/Equipment/Measurement Book (e-MB
+Preview)/Budget tabs; every metric links to its source records.
+**Deferred:** DPR material/labour/equipment auto-suggest into ledgers (Phase F), invoice↔
+receipt three-way match (post-MVP), PO PDF layout (Phase F), cost-entry kinds labour/
+equipment from attendance/logs (recorded manually for now).
+
 ### 2026-07-19 — Phase C landed: project controls
 
 **What:** schedule items/milestones with baseline vs current dates and manual progress
