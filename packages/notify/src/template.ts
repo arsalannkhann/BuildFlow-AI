@@ -30,7 +30,7 @@ export function renderBrandedEmail(input: BrandedEmailInput): string {
 <span style="display:inline-block; vertical-align:middle; width:10px; height:22px; background-color:#A84812; border-radius:3px;">&nbsp;</span>
 <span style="display:inline-block; vertical-align:middle; width:10px; height:14px; background-color:#DCEAF2; border-radius:3px; margin-left:3px;">&nbsp;</span>
 <span style="font-size:20px; font-weight:700; color:#FFFFFF; margin-left:10px; vertical-align:middle;">BuildFlow</span>
-<span style="font-size:12px; color:#9FB3C8; margin-left:8px; vertical-align:middle;">Site reports, simplified</span>
+<span style="font-size:12px; color:#9FB3C8; margin-left:8px; vertical-align:middle;">The construction operations OS</span>
 </td></tr>
 <tr><td style="background-color:#FFFFFF; border:1px solid #E5E7EB; border-top:0; border-radius:0 0 14px 14px; padding:32px; font-family:Inter,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
 <div style="font-size:22px; line-height:30px; font-weight:700; color:#111827; padding-bottom:12px;">${esc(input.title)}</div>

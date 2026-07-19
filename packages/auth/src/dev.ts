@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { and, eq, lt } from "drizzle-orm";
 import type { AppDb } from "@buildflow/db/client";
 import { authCredentials, sessions, users } from "@buildflow/db/schema";
+import { withAuthBootstrap } from "@buildflow/db/tenant";
 import { hashPassword, verifyPassword } from "@buildflow/domain/security/password";
 import type { AuthPort, SessionUser } from "./port";
 
@@ -11,10 +12,12 @@ const tokenHash = (token: string) => createHash("sha256").update(token).digest("
 
 export class DevAuthAdapter implements AuthPort {
   async signInWithPassword(db: AppDb, email: string, password: string) {
-    const rows = await db.select({ user: users, cred: authCredentials })
+    // Pre-authentication: no tenant is known yet, so this lookup needs the bootstrap or
+    // RLS hides every candidate row and sign-in fails for everyone.
+    const rows = await withAuthBootstrap(db, (tx) => tx.select({ user: users, cred: authCredentials })
       .from(users)
       .innerJoin(authCredentials, eq(authCredentials.userId, users.id))
-      .where(and(eq(users.email, email.trim().toLowerCase()), eq(users.isActive, true)));
+      .where(and(eq(users.email, email.trim().toLowerCase()), eq(users.isActive, true))));
     const row = rows[0];
     // Verify against a constant-cost dummy hash when the user is unknown so response
     // timing does not reveal which emails exist.

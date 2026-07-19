@@ -1,4 +1,4 @@
-import { getDb } from "@buildflow/db/client";
+import { enableSystemMode, getDb } from "@buildflow/db/client";
 import { runOnce } from "@buildflow/jobs/runner";
 import { pipelineJobRegistry } from "@buildflow/pipeline/jobs";
 import { sweepMissingReports } from "@buildflow/pipeline/missing-reports";
@@ -15,6 +15,9 @@ async function main(): Promise<void> {
     logEvent("error", "worker.configuration_invalid", { errorCategory: "database_url_missing" });
     process.exit(1);
   }
+  // The lease loop and the sweeps below span every tenant, so this process has no single
+  // app.org_id to bind and needs the sanctioned cross-tenant path. Must precede getDb().
+  enableSystemMode();
   const db = await getDb();
   let stopping = false;
   const stop = () => { stopping = true; };
