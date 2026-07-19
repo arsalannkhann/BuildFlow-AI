@@ -9,6 +9,7 @@
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
     "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx scripts/migrate.ts",
     "verify:real-pg": "tsx scripts/verify-real-postgres.ts",
     "seed:demo": "tsx scripts/seed-demo.ts"
   },

@@ -23,12 +23,14 @@ current ADRs:
 - ADR-0003 — Durable background work via transactional outbox + DB-backed job runner behind
   a queue port. It is the MVP runner; Cloud Tasks is an extraction option after measured
   throughput or isolation needs justify another managed component.
+- ADR-0004 — Google Cloud production runtime: Cloud Run, Cloud SQL PostgreSQL, private GCS,
+  Secret Manager and Vertex AI Gemini; no VM or graph database.
 
 The release candidate uses Next.js route handlers/server actions rather than NestJS,
 repository-native CSS rather than Tailwind/shadcn, the portable credential/session adapter
 rather than Supabase Auth, and allow-listed JSON logging rather than a full OpenTelemetry
-exporter. PostgreSQL, Supabase Storage, Cloud Run/OpenTofu and provider adapters preserve the
-target deployment path without making unimplemented components sound operational.
+exporter. The production MVP runs on Cloud Run and Cloud SQL with GCS evidence storage and
+Vertex AI Gemini behind the existing provider adapters.
 
 ## 2. Architecture principles
 
@@ -88,15 +90,14 @@ Versions should be pinned by the lockfile and automated updates. Use the current
 | Forms and validation | React Hook Form + Zod | Performant capture and shared runtime schemas. |
 | API | NestJS with Fastify adapter and OpenAPI | Modular boundaries, dependency injection, validation, mature operational structure. |
 | Database access | Drizzle ORM plus reviewed SQL migrations | Strong TypeScript inference without hiding PostgreSQL features such as RLS, JSONB, vectors, and PostGIS. |
-| Primary database | Managed PostgreSQL through Supabase in its Mumbai region | SQL source of truth, backups, Auth/Storage integration, RLS, `pgvector`, and PostGIS. Confirm contractual data-residency requirements before production. |
-| Authentication | Supabase Auth with server-verified JWTs | Email/mobile authentication and a portable PostgreSQL-centered identity model. Business authorization remains in BuildFlow. |
-| Evidence storage | Supabase Storage initially; storage adapter compatible with Google Cloud Storage or S3 | Signed direct uploads, object policies, and migration path. |
-| Background work | Google Cloud Tasks for commands; Pub/Sub only for fan-out events | Managed retries and rate control without operating a broker. |
-| Runtime | Google Cloud Run in Mumbai/nearest approved India region | Container portability, autoscaling, jobs, and low operational overhead. |
+| Primary database | Cloud SQL PostgreSQL 16 in Mumbai | SQL source of truth with automatic backups, PITR, RLS, `pgvector`, and PostGIS support. |
+| Authentication | PostgreSQL-backed credentials and server-side sessions behind `AuthPort` | No external identity key is required; business authorization remains in BuildFlow and the adapter remains replaceable. |
+| Evidence storage | Private Google Cloud Storage in Mumbai behind `StoragePort` | Uniform bucket access, public-access prevention, object versioning and short-lived signed URLs. |
+| Background work | Transactional PostgreSQL queue plus Cloud Run worker pool | Idempotent leases/retries/dead letters without adding a broker before measured need. |
+| Runtime | Google Cloud Run service, job and worker pool in Mumbai | Container portability, web autoscaling, explicit migrations and continuous pull-based work. |
 | AI orchestration | Small internal workflow/state machine; no agent framework in MVP | The pipeline is deterministic and auditable. Add an agent SDK only for genuinely tool-using flows. |
-| LLM and vision | OpenAI Responses API with Structured Outputs behind a provider port | Multimodal extraction and reasoning with schema-constrained outputs. |
-| Speech | Benchmark OpenAI transcription against Sarvam and Bhashini on field audio | Provider choice must be based on Indic language, code-mixing, noise, latency, and cost evidence. |
-| OCR | OpenAI vision for pilot extraction; benchmark Google Document AI for invoices/challans | Start simple; use a specialized processor if field accuracy or cost warrants it. |
+| LLM, vision and OCR | Vertex AI Gemini behind `AI_PROVIDER=gemini` | Workload identity, multimodal extraction and reasoning with schema validation; model IDs remain runtime configuration. |
+| Speech | Gemini multimodal transcription for the MVP; benchmark Chirp 3 on representative field audio | Provider choice must be based on Indic language, code-mixing, noise, latency and cost evidence. |
 | PDF | HTML/CSS templates rendered by Playwright/Chromium in a worker | Deterministic, brandable PDFs using the same design tokens as web. |
 | Messaging | Meta WhatsApp Cloud API behind a messaging adapter; transactional email provider | Direct control and future provider portability. |
 | Observability | OpenTelemetry + Google Cloud Logging/Monitoring + Sentry | Cross-service traces, infrastructure metrics, and product-facing error diagnosis. |
@@ -110,18 +111,17 @@ Versions should be pinned by the lockfile and automated updates. Use the current
 - Python is isolated to work where its ecosystem is materially better.
 - Managed infrastructure preserves founder time during pilots.
 - PostgreSQL prevents premature database fragmentation.
-- The system can move from Supabase Storage/Auth to cloud-native alternatives through adapters without rewriting the domain.
+- Storage and AI provider changes remain isolated behind ports rather than rewriting the domain.
 - Cloud Run handles bursty AI workloads and can scale idle workers down.
 
 ## 5. Source-backed technology notes
 
 - Next.js recommends the App Router for current React features: <https://nextjs.org/docs/app>
 - Expo documents SQLite persistence and local-first patterns: <https://docs.expo.dev/versions/latest/sdk/sqlite/> and <https://docs.expo.dev/guides/local-first/>
-- Supabase documents PostgreSQL RLS, `pgvector`, and PostGIS: <https://supabase.com/docs/guides/database/overview>
-- Supabase lists a specific South Asia (Mumbai) region: <https://supabase.com/docs/guides/platform/regions>
-- OpenAI documents schema-constrained model output: <https://developers.openai.com/api/docs/guides/structured-outputs>
-- OpenAI’s current model catalog should be consulted rather than hard-coding a model family into domain code: <https://developers.openai.com/api/docs/models>
-- OpenAI’s transcription models and endpoints are documented here: <https://developers.openai.com/api/docs/guides/speech-to-text>
+- Cloud SQL documents supported PostgreSQL extensions, including `pgvector` and PostGIS: <https://docs.cloud.google.com/sql/docs/postgres/extensions>
+- Cloud Storage documents time-bounded V4 signed URLs: <https://docs.cloud.google.com/storage/docs/access-control/signed-urls>
+- Vertex AI documents Gemini models and lifecycle: <https://docs.cloud.google.com/vertex-ai/generative-ai/docs/learn/model-versions>
+- Vertex AI documents `gemini-embedding-001`: <https://docs.cloud.google.com/vertex-ai/generative-ai/docs/embeddings/get-text-embeddings>
 - Cloud Run autoscaling behavior is documented here: <https://docs.cloud.google.com/run/docs/about-instance-autoscaling>
 
 ## 6. Repository layout
@@ -144,7 +144,7 @@ buildflow/
 │   ├── observability/       # Logging/tracing conventions
 │   ├── pdf/                 # Issued DPR/compliance PDF rendering
 │   ├── pipeline/            # Processing stages and job handlers
-│   └── storage/             # Local and Supabase object-storage adapters
+│   └── storage/             # Local, Google Cloud Storage and Supabase adapters
 ├── prompts/
 │   ├── dpr-extraction/      # Versioned prompt + schema + eval metadata
 │   └── dpr-summary/
@@ -165,7 +165,10 @@ buildflow/
 
 ### Deployment locality
 
-Deploy Supabase in Mumbai and the API/workers in the nearest approved Mumbai region. Measure database latency and cross-provider egress during the pilot. If the split becomes material, move the runtime or managed data layer through an ADR; do not scatter storage, database, queue, and compute across additional regions.
+Cloud Run, Cloud SQL and GCS are deployed in `asia-south1` (Mumbai). Vertex AI uses the
+approved model endpoint selected at deployment; record any customer-specific residency
+constraint before processing their content. Do not scatter storage, database and compute across
+additional regions without an ADR and measured need.
 
 ## 7. Domain modules
 

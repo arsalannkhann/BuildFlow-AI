@@ -1,0 +1,17 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --target
+      - web
+      - --tag
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/web:${_IMAGE_TAG}
+      - .
+images:
+  - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/web:${_IMAGE_TAG}
+substitutions:
+  _REGION: asia-south1
+  _REPOSITORY: buildflow
+  _IMAGE_TAG: manual
+options:
+  logging: CLOUD_LOGGING_ONLY

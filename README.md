@@ -5,11 +5,11 @@ contractors, developers and EPC firms. Field evidence (voice, photos and documen
 an AI-assisted draft, then a human-approved project record used by reports, controls,
 materials, costs, measurement, compliance and grounded portfolio answers.
 
-**Engineering status (2026-07-19):** Phases A–F of the complete MVP are implemented. The
-local release gate passes 15 package typechecks, 162 unit/integration tests, a production
-build and three critical browser journeys. The Docker/managed-Postgres migration check and
-live Supabase signed-URL smoke remain environment-specific pre-deployment gates; see
-`docs/RELEASE-EVIDENCE.md`.
+**Engineering status (2026-07-19):** Phases A–F of the complete MVP are implemented and the
+Google Cloud production runtime is deployed. Pull requests run the complete release gate;
+successful commits to `main` build digest-pinned images, migrate Cloud SQL and deploy the web
+and worker runtimes through keyless GitHub OIDC. See `docs/RELEASE-EVIDENCE.md` and
+`infrastructure/gcp/README.md`.
 
 ## Repository layout
 
@@ -25,7 +25,7 @@ packages/
   auth/           portable authentication port and credential/session adapter
   jobs/           transactional queue, leases, retries and dead letters
   ai/             transcription, extraction and summary provider ports
-  storage/        local-FS and Supabase Storage adapters
+  storage/        local-FS, Google Cloud Storage and Supabase Storage adapters
   pipeline/       DPR/document processing stages and job registry
   lifecycle/      organization export, retention and deletion workflows
   observability/  allow-listed structured logs and trace context
@@ -71,9 +71,10 @@ DATABASE_URL=postgresql://buildflow:buildflow@localhost:5432/buildflow \
 ```
 
 The same reviewed migrations serve embedded PGlite, Docker PostgreSQL and managed PostgreSQL.
-Production evidence storage uses the Supabase adapter when `SUPABASE_URL`,
-`SUPABASE_SERVICE_ROLE_KEY` and `SUPABASE_STORAGE_BUCKET` are configured together. Otherwise
-the application intentionally stays on local storage.
+Production evidence storage uses the Google Cloud Storage adapter with
+`STORAGE_PROVIDER=gcs` and `GCS_STORAGE_BUCKET`. The portable Supabase adapter remains
+available when its three server-side variables are configured together. Otherwise the
+application intentionally stays on local storage.
 
 ## Verify a release
 
@@ -91,9 +92,10 @@ CI uses Node 22 and also provisions PostgreSQL for the migration/RLS gate.
 
 ## Providers and safety
 
-Mock AI is the default. Set `AI_PROVIDER=openai` and server-side OpenAI configuration to use
-the live adapter. Provider keys and Supabase service-role keys must never reach the browser.
-Unknown provider values fail closed.
+Mock AI is the default. Set `AI_PROVIDER=gemini`, `GOOGLE_CLOUD_PROJECT` and an approved
+Vertex AI location to use workload-identity authenticated Gemini models. The OpenAI adapter
+remains portable. Provider keys and storage service credentials must never reach the browser;
+unknown provider values fail closed.
 
 AI output is always a draft until an accountable user approves it. BuildFlow does not make
 autonomous payments, procurement decisions, progress claims or government submissions.
