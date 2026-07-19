@@ -25,3 +25,4 @@ playwright-report/
 # Generated review, advertising, audio, and video artifacts
 /output/
 /tmp/
+.turbo/

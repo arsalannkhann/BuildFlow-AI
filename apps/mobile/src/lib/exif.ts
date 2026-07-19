@@ -31,3 +31,16 @@ export function exifTimestampToIso(exif: ExifLike | null | undefined, now: Date)
 export function exifHasLocation(exif: ExifLike | null | undefined): boolean {
   return typeof exif?.GPSLatitude === "number" && typeof exif?.GPSLongitude === "number";
 }
+
+/** Current device time as ISO 8601 with the local UTC offset. */
+export function isoNowWithOffset(now: Date): string {
+  const offsetMinutes = -now.getTimezoneOffset();
+  const sign = offsetMinutes >= 0 ? "+" : "-";
+  const absolute = Math.abs(offsetMinutes);
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return (
+    `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}` +
+    `T${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}` +
+    `${sign}${pad(Math.floor(absolute / 60))}:${pad(absolute % 60)}`
+  );
+}

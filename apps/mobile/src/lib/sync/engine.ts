@@ -17,12 +17,7 @@
 //
 // Pure TypeScript: all side effects arrive through the injected adapters.
 
-import {
-  HttpTransportError,
-  type HttpResponse,
-  type SqlAdapter,
-  type SyncEngineDeps,
-} from "./adapters";
+import type { HttpResponse, SqlAdapter, SyncEngineDeps } from "./adapters";
 import {
   apiPaths,
   createReportRequest,

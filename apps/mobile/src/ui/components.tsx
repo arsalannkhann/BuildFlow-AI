@@ -113,10 +113,12 @@ export function BodyText(props: {
   children: ReactNode;
   muted?: boolean;
   strong?: boolean;
+  nativeID?: string;
   style?: StyleProp<TextStyle>;
 }) {
   return (
     <Text
+      nativeID={props.nativeID}
       style={[
         props.strong ? styles.bodyStrong : styles.body,
         props.muted ? { color: colors.neutral500 } : null,

@@ -415,13 +415,27 @@ export class ExpoFileAdapter implements FileAdapter {
 
 // --------------------------------------------------------------------- http
 
+/**
+ * DOM BodyInit/BufferSource require views backed by a plain ArrayBuffer.
+ * Adapter callers hand us `Uint8Array<ArrayBufferLike>`; this narrows (or, in
+ * the SharedArrayBuffer edge case, copies) to a strict view.
+ */
+function asStrictBytes(bytes: Uint8Array): Uint8Array<ArrayBuffer> {
+  if (bytes.buffer instanceof ArrayBuffer) {
+    return bytes as Uint8Array<ArrayBuffer>;
+  }
+  const copy = new Uint8Array(bytes.byteLength);
+  copy.set(bytes);
+  return copy;
+}
+
 export class ExpoHttpAdapter implements HttpAdapter {
   async request(request: HttpRequest): Promise<HttpResponse> {
     try {
       const response = await expoFetch(request.url, {
         method: request.method,
         headers: request.headers,
-        body: request.body,
+        body: request.body instanceof Uint8Array ? asStrictBytes(request.body) : request.body,
       });
       const bodyText = await response.text();
       return { status: response.status, bodyText };
@@ -446,7 +460,7 @@ export class ExpoClockAdapter implements ClockAdapter {
 
 export class ExpoCryptoAdapter implements CryptoAdapter {
   async sha256Hex(bytes: Uint8Array): Promise<string> {
-    const digest = await Crypto.digest(Crypto.CryptoDigestAlgorithm.SHA256, bytes);
+    const digest = await Crypto.digest(Crypto.CryptoDigestAlgorithm.SHA256, asStrictBytes(bytes));
     return Array.from(new Uint8Array(digest))
       .map((byte) => byte.toString(16).padStart(2, "0"))
       .join("");
