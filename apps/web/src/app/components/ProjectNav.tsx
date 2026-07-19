@@ -7,6 +7,7 @@ const TABS = [
   { slug: "rfis", label: "RFIs" },
   { slug: "documents", label: "Documents" },
   { slug: "materials", label: "Materials" },
+  { slug: "procurement", label: "Procurement" },
   { slug: "labour", label: "Labour" },
   { slug: "equipment", label: "Equipment" },
   { slug: "mb", label: "Measurement Book (e-MB Preview)" },
