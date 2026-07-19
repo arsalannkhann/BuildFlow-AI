@@ -86,6 +86,8 @@ jobs:
       - run: pnpm vitest run apps/mobile/src/lib/sync
 
   deploy-production:
+    # Cloud Run retired 2026-07-20 — production runs on the VM (docker-compose.production.yml).
+    if: ${{ false }}
     name: Deploy production
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     needs: [checks, e2e, real-postgres, mobile]

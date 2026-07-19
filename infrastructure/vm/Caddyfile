@@ -1,0 +1,4 @@
+# Automatic HTTPS once bronn.dev's A record points at this VM.
+bronn.dev {
+    reverse_proxy web:8080
+}
