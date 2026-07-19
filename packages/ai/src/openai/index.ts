@@ -1,6 +1,7 @@
 import { dprSchema, type DprStructuredData } from "@buildflow/domain/dpr/schema";
 import type { AiRegistry } from "../registry";
 import type { TranscriptionPort, ExtractionPort, SummaryPort, TranscriptResult } from "../ports";
+import { OpenAiDocumentExtraction } from "./documents";
 
 const MODEL = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
 
@@ -67,5 +68,8 @@ class OpenAiSummary implements SummaryPort {
 }
 
 export function openAiRegistry(): AiRegistry {
-  return { transcription: new OpenAiTranscription(), extraction: new OpenAiExtraction(), summary: new OpenAiSummary() };
+  return {
+    transcription: new OpenAiTranscription(), extraction: new OpenAiExtraction(),
+    summary: new OpenAiSummary(), documents: new OpenAiDocumentExtraction(),
+  };
 }

@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, integer, timestamp, jsonb, boolean, bigint, doublePrecision } from "drizzle-orm/pg-core";
+import { pgTable, text, integer, timestamp, jsonb, boolean, bigint, doublePrecision, numeric } from "drizzle-orm/pg-core";
 
 const ts = (name = "created_at") => timestamp(name, { withTimezone: true }).defaultNow().notNull();
 
@@ -277,6 +277,437 @@ export const reportActivityLinks = pgTable("report_activity_link", {
   createdAt: ts(),
 });
 
+// --- Phase D: commercial operations (docs/PHASE-D-DESIGN.md) ---
+// Money is integer paise + ISO currency code; quantities are numeric strings + unit text;
+// dates are ISO YYYY-MM-DD text with the project timezone applied at display (rules.md §7).
+
+export const materials = pgTable("material", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull(),
+  name: text("name").notNull(),
+  unit: text("unit").notNull(), // UCUM-ish code: bag | kg | cum | sqm | nos ...
+  hsnCode: text("hsn_code"),
+  reorderThreshold: numeric("reorder_threshold"), // shortage alert when current stock < threshold
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: ts(),
+});
+
+export const suppliers = pgTable("supplier", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull(),
+  name: text("name").notNull(),
+  gstin: text("gstin"),
+  phone: text("phone"),
+  email: text("email"),
+  address: text("address"),
+  createdAt: ts(),
+});
+
+export const projectSuppliers = pgTable("project_supplier", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull(),
+  projectId: text("project_id").notNull(),
+  supplierId: text("supplier_id").notNull(),
+  notes: text("notes"),
+  createdAt: ts(),
+});
+
+// A delivery challan. draft -> reviewed (human) -> posted. Posting writes stock_transaction
+// rows in the same transaction; the partial unique index on (source_kind, source_id) makes
+// a retried posting idempotent. OCR only ever fills DRAFT lines — never stock.
+export const materialReceipts = pgTable("material_receipt", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull(),
+  projectId: text("project_id").notNull(),
+  supplierId: text("supplier_id"),
+  challanNumber: text("challan_number"),
+  receiptDate: text("receipt_date").notNull(),
+  status: text("status").notNull().default("draft"), // draft | reviewed | posted
+  note: text("note"),
+  // challan photo evidence, stored directly (attachment table is report-scoped)
+  objectKey: text("object_key"),
+  fileName: text("file_name"),
+  contentType: text("content_type"),
+  byteSize: bigint("byte_size", { mode: "number" }),
+  checksum: text("checksum"),
+  // OCR provenance (rules.md §11: store provider/model/schema versions)
+  ocrProvider: text("ocr_provider"),
+  ocrModel: text("ocr_model"),
+  ocrSchemaVersion: text("ocr_schema_version"),
+  ocrStatus: text("ocr_status"), // queued | succeeded | failed | unsupported (null = no OCR)
+  reviewedBy: text("reviewed_by"),
+  reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+  postedBy: text("posted_by"),
+  postedAt: timestamp("posted_at", { withTimezone: true }),
+  createdBy: text("created_by").notNull(),
+  createdAt: ts(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const materialReceiptLines = pgTable("material_receipt_line", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull(),
+  receiptId: text("receipt_id").notNull(),
+  materialId: text("material_id"), // mapped by the reviewer; required before posting
+  descriptionRaw: text("description_raw").notNull(), // as OCR (or the person) wrote it
+  quantity: numeric("quantity").notNull(),
+  unit: text("unit").notNull(),
+  ratePaise: bigint("rate_paise", { mode: "number" }),
+  amountPaise: bigint("amount_paise", { mode: "number" }),
+  currency: text("currency").notNull().default("INR"),
+  confidenceBand: text("confidence_band"), // Supported | Check | Missing (null = manual entry)
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: ts(),
+});
+
+// Append-only stock ledger. Current stock is ALWAYS a sum over this table — no mutable
+// "current level" column. Sign is derived from kind at query time (adjusted is signed
+// as entered).
+export const stockTransactions = pgTable("stock_transaction", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull(),
+  projectId: text("project_id").notNull(),
+  materialId: text("material_id").notNull(),
+  kind: text("kind").notNull(), // received | issued | consumed | adjusted | returned
+  quantity: numeric("quantity").notNull(),
+  unit: text("unit").notNull(),
+  sourceKind: text("source_kind"), // receipt_line | manual | dpr_material
+  sourceId: text("source_id"),
+  note: text("note"),
+  createdBy: text("created_by").notNull(),
+  createdAt: ts(),
+});
+
+// Org-level chart of cost codes (budget + cost entries reference these).
+export const costCodes = pgTable("cost_code", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull(),
+  code: text("code").notNull(),
+  name: text("name").notNull(),
+  parentId: text("parent_id"),
+  createdAt: ts(),
+});
+
+// Budgets are immutable versions: a revision inserts a new budget (version = prior + 1)
+// and marks the prior superseded. Lines are never edited in place.
+export const budgets = pgTable("budget", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull(),
+  projectId: text("project_id").notNull(),
+  version: integer("version").notNull(),
+  status: text("status").notNull().default("active"), // draft | active | superseded
+  note: text("note"),
+  createdBy: text("created_by").notNull(),
+  createdAt: ts(),
+});
+
+export const budgetLines = pgTable("budget_line", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull(),
+  budgetId: text("budget_id").notNull(),
+  costCodeId: text("cost_code_id").notNull(),
+  description: text("description").notNull(),
+  quantity: numeric("quantity"),
+  unit: text("unit"),
+  amountPaise: bigint("amount_paise", { mode: "number" }).notNull(),
+  currency: text("currency").notNull().default("INR"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: ts(),
+});
+
+// Supplier invoice. draft -> reviewed -> approved (invoice.review). Approval posts
+// cost_entry rows exactly once (partial unique on cost_entry source refs).
+export const invoices = pgTable("invoice", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull(),
+  projectId: text("project_id").notNull(),
+  supplierId: text("supplier_id"),
+  invoiceNumber: text("invoice_number"),
+  invoiceDate: text("invoice_date"),
+  gstin: text("gstin"),
+  subtotalPaise: bigint("subtotal_paise", { mode: "number" }),
+  taxPaise: bigint("tax_paise", { mode: "number" }),
+  totalPaise: bigint("total_paise", { mode: "number" }),
+  currency: text("currency").notNull().default("INR"),
+  status: text("status").notNull().default("draft"), // draft | reviewed | approved
+  objectKey: text("object_key"),
+  fileName: text("file_name"),
+  contentType: text("content_type"),
+  byteSize: bigint("byte_size", { mode: "number" }),
+  checksum: text("checksum"),
+  ocrProvider: text("ocr_provider"),
+  ocrModel: text("ocr_model"),
+  ocrSchemaVersion: text("ocr_schema_version"),
+  ocrStatus: text("ocr_status"),
+  reviewedBy: text("reviewed_by"),
+  reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+  approvedBy: text("approved_by"),
+  approvedAt: timestamp("approved_at", { withTimezone: true }),
+  createdBy: text("created_by").notNull(),
+  createdAt: ts(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const invoiceLines = pgTable("invoice_line", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull(),
+  invoiceId: text("invoice_id").notNull(),
+  description: text("description").notNull(),
+  hsn: text("hsn"),
+  quantity: numeric("quantity"),
+  unit: text("unit"),
+  ratePaise: bigint("rate_paise", { mode: "number" }),
+  taxRateBp: integer("tax_rate_bp"), // GST as basis points, e.g. 1800 = 18%
+  amountPaise: bigint("amount_paise", { mode: "number" }), // required before approval
+  currency: text("currency").notNull().default("INR"),
+  costCodeId: text("cost_code_id"),
+  confidenceBand: text("confidence_band"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: ts(),
+});
+
+// Append-only actuals. source refs (approved invoice line, attendance calc, manual)
+// carry a partial unique index so posting retries are idempotent.
+export const costEntries = pgTable("cost_entry", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull(),
+  projectId: text("project_id").notNull(),
+  costCodeId: text("cost_code_id"),
+  kind: text("kind").notNull(), // labour | material | equipment | invoice | other
+  amountPaise: bigint("amount_paise", { mode: "number" }).notNull(),
+  currency: text("currency").notNull().default("INR"),
+  sourceKind: text("source_kind"), // invoice_line | manual | attendance
+  sourceId: text("source_id"),
+  entryDate: text("entry_date").notNull(),
+  note: text("note"),
+  createdBy: text("created_by").notNull(),
+  createdAt: ts(),
+});
+
+// Payments are RECORDED, never executed (no money movement in product scope).
+export const payments = pgTable("payment", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull(),
+  projectId: text("project_id").notNull(),
+  invoiceId: text("invoice_id").notNull(),
+  amountPaise: bigint("amount_paise", { mode: "number" }).notNull(),
+  currency: text("currency").notNull().default("INR"),
+  paidDate: text("paid_date").notNull(),
+  reference: text("reference"),
+  createdBy: text("created_by").notNull(),
+  createdAt: ts(),
+});
+
+// Labour: daily contractor totals only — no individual worker identities, no biometrics.
+export const labourContractors = pgTable("labour_contractor", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull(),
+  projectId: text("project_id"), // null = available org-wide
+  name: text("name").notNull(),
+  trade: text("trade"),
+  createdAt: ts(),
+});
+
+export const labourAttendance = pgTable("labour_attendance", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull(),
+  projectId: text("project_id").notNull(),
+  attendanceDate: text("attendance_date").notNull(),
+  contractorId: text("contractor_id"),
+  trade: text("trade").notNull(),
+  headcount: integer("headcount").notNull(),
+  hoursWorked: numeric("hours_worked"),
+  locationId: text("location_id"),
+  activityId: text("activity_id"),
+  reportId: text("report_id"), // optional source DPR
+  note: text("note"),
+  createdBy: text("created_by").notNull(),
+  createdAt: ts(),
+});
+
+export const equipment = pgTable("equipment", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull(),
+  name: text("name").notNull(),
+  kind: text("kind"), // excavator | mixer | crane | ...
+  ownership: text("ownership").notNull().default("owned"), // owned | rented
+  supplierId: text("supplier_id"), // rental supplier
+  identifier: text("identifier"), // registration / asset number
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: ts(),
+});
+
+export const equipmentAssignments = pgTable("equipment_assignment", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull(),
+  projectId: text("project_id").notNull(),
+  equipmentId: text("equipment_id").notNull(),
+  fromDate: text("from_date").notNull(),
+  toDate: text("to_date"),
+  createdBy: text("created_by").notNull(),
+  createdAt: ts(),
+});
+
+// Append-only usage log (hours, fuel, downtime) — corrections are new rows.
+export const equipmentLogs = pgTable("equipment_log", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull(),
+  projectId: text("project_id").notNull(),
+  equipmentId: text("equipment_id").notNull(),
+  logDate: text("log_date").notNull(),
+  hoursUsed: numeric("hours_used"),
+  fuelLitres: numeric("fuel_litres"),
+  downtimeHours: numeric("downtime_hours"),
+  note: text("note"),
+  reportId: text("report_id"),
+  createdBy: text("created_by").notNull(),
+  createdAt: ts(),
+});
+
+// Deterministic service reminders: due_date within N days OR cumulative logged hours
+// >= due_hours. No prediction.
+export const equipmentServices = pgTable("equipment_service", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull(),
+  equipmentId: text("equipment_id").notNull(),
+  name: text("name").notNull(),
+  dueDate: text("due_date"),
+  dueHours: numeric("due_hours"),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  completedNote: text("completed_note"),
+  createdBy: text("created_by").notNull(),
+  createdAt: ts(),
+});
+
+// Measurement Book (e-MB Preview) — NOT legally authoritative. quantity is always
+// server-computed from the dimensions (packages/domain/src/mb/calc.ts); the formula
+// string is stored with the row. Append-only after certification: a correction inserts a
+// new entry with corrects_entry_id and the certified row only ever gains superseded_by.
+export const mbEntries = pgTable("mb_entry", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull(),
+  projectId: text("project_id").notNull(),
+  mbNumber: integer("mb_number").notNull(), // per-project sequence, unique index below
+  description: text("description").notNull(),
+  activityId: text("activity_id"),
+  locationId: text("location_id"),
+  contractorId: text("contractor_id"),
+  measurementDate: text("measurement_date").notNull(),
+  length: numeric("length"),
+  breadth: numeric("breadth"),
+  depth: numeric("depth"),
+  count: integer("count"),
+  unit: text("unit").notNull(),
+  quantity: numeric("quantity").notNull(), // server-computed, never client-supplied
+  formula: text("formula").notNull(), // e.g. "L×B×D×n"
+  status: text("status").notNull().default("draft"), // draft | submitted | verified | rejected | certified
+  rejectionReason: text("rejection_reason"),
+  correctsEntryId: text("corrects_entry_id"),
+  supersededBy: text("superseded_by"),
+  createdBy: text("created_by").notNull(),
+  submittedAt: timestamp("submitted_at", { withTimezone: true }),
+  verifiedBy: text("verified_by"),
+  verifiedAt: timestamp("verified_at", { withTimezone: true }),
+  certifiedBy: text("certified_by"),
+  certifiedAt: timestamp("certified_at", { withTimezone: true }),
+  createdAt: ts(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+// Geotagged photo evidence for MB entries. Photo metadata is presented as metadata,
+// never guaranteed truth (rules.md §13).
+export const mbEvidence = pgTable("mb_evidence", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull(),
+  entryId: text("entry_id").notNull(),
+  objectKey: text("object_key").notNull(),
+  fileName: text("file_name"),
+  contentType: text("content_type").notNull(),
+  byteSize: bigint("byte_size", { mode: "number" }).notNull(),
+  checksum: text("checksum").notNull(),
+  latitude: doublePrecision("latitude"),
+  longitude: doublePrecision("longitude"),
+  capturedAt: timestamp("captured_at", { withTimezone: true }),
+  createdBy: text("created_by").notNull(),
+  createdAt: ts(),
+});
+
+// RFQ -> manual supplier quotes -> comparison -> PO draft -> approved -> exported.
+// POs are NEVER sent automatically; export is a manual CSV/JSON download.
+export const rfqs = pgTable("rfq", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull(),
+  projectId: text("project_id").notNull(),
+  title: text("title").notNull(),
+  status: text("status").notNull().default("open"), // open | closed
+  neededBy: text("needed_by"),
+  note: text("note"),
+  createdBy: text("created_by").notNull(),
+  createdAt: ts(),
+});
+
+export const rfqItems = pgTable("rfq_item", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull(),
+  rfqId: text("rfq_id").notNull(),
+  materialId: text("material_id"),
+  description: text("description").notNull(),
+  quantity: numeric("quantity").notNull(),
+  unit: text("unit").notNull(),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: ts(),
+});
+
+// Quotes are entered MANUALLY per item per supplier (unique index below).
+export const rfqQuotes = pgTable("rfq_quote", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull(),
+  rfqItemId: text("rfq_item_id").notNull(),
+  supplierId: text("supplier_id").notNull(),
+  ratePaise: bigint("rate_paise", { mode: "number" }).notNull(),
+  currency: text("currency").notNull().default("INR"),
+  deliveryDays: integer("delivery_days"),
+  notes: text("notes"),
+  createdBy: text("created_by").notNull(),
+  createdAt: ts(),
+});
+
+export const purchaseOrders = pgTable("purchase_order", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull(),
+  projectId: text("project_id").notNull(),
+  supplierId: text("supplier_id").notNull(),
+  rfqId: text("rfq_id"),
+  poNumber: integer("po_number").notNull(), // per-project sequence, unique index below
+  status: text("status").notNull().default("draft"), // draft | approved | exported
+  totalPaise: bigint("total_paise", { mode: "number" }).notNull().default(0),
+  currency: text("currency").notNull().default("INR"),
+  note: text("note"),
+  createdBy: text("created_by").notNull(),
+  approvedBy: text("approved_by"),
+  approvedAt: timestamp("approved_at", { withTimezone: true }),
+  exportedAt: timestamp("exported_at", { withTimezone: true }),
+  createdAt: ts(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const poLines = pgTable("po_line", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull(),
+  purchaseOrderId: text("purchase_order_id").notNull(),
+  materialId: text("material_id"),
+  costCodeId: text("cost_code_id"),
+  description: text("description").notNull(),
+  quantity: numeric("quantity").notNull(),
+  unit: text("unit").notNull(),
+  ratePaise: bigint("rate_paise", { mode: "number" }).notNull(),
+  amountPaise: bigint("amount_paise", { mode: "number" }).notNull(),
+  currency: text("currency").notNull().default("INR"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: ts(),
+});
+
+
 export const dailyReports = pgTable("daily_report", {
   id: text("id").primaryKey(),
   organizationId: text("organization_id").notNull(),
@@ -403,6 +834,11 @@ export const schema = {
   locations, activities, invitations, clientLinks,
   scheduleItems, scheduleDependencies, progressUpdates, blockers, rfis, rfiResponses,
   documents, documentRevisions, reportActivityLinks,
+  materials, suppliers, projectSuppliers, materialReceipts, materialReceiptLines, stockTransactions,
+  costCodes, budgets, budgetLines, invoices, invoiceLines, costEntries, payments,
+  labourContractors, labourAttendance, equipment, equipmentAssignments, equipmentLogs, equipmentServices,
+  mbEntries, mbEvidence,
+  rfqs, rfqItems, rfqQuotes, purchaseOrders, poLines,
   dailyReports, reportRevisions,
   attachments, evidenceLinks, processingRuns, processingStages, reviewDecisions,
   issuedDocuments, auditEvents,

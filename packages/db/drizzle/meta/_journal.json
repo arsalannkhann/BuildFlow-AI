@@ -50,6 +50,13 @@
       "when": 1784459421912,
       "tag": "0006_brown_hitman",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1784460510826,
+      "tag": "0007_volatile_jocasta",
+      "breakpoints": true
     }
   ]
 }

@@ -2,6 +2,7 @@ import { getDb } from "@buildflow/db/client";
 import { currentContext } from "@/app/session";
 import { getProject } from "@buildflow/db/queries/projects";
 import { projectOverview } from "@/core/controls-core";
+import { shortageAlerts } from "@/core/materials-core";
 import { AppHeader } from "@/app/components/AppHeader";
 import { ProjectNav } from "@/app/components/ProjectNav";
 import Link from "next/link";
@@ -13,6 +14,7 @@ export default async function ProjectOverviewPage({ params }: { params: Promise<
   const ctx = { ...base, projectId: id };
   const project = await getProject(db, ctx, id);
   const overview = await projectOverview(db, ctx, id);
+  const shortages = await shortageAlerts(db, ctx, id);
   const missingDays = overview.reporting.last7Days.filter((d) => !d.hasAny).length;
 
   return (
@@ -67,6 +69,23 @@ export default async function ProjectOverviewPage({ params }: { params: Promise<
               <p><strong>{overview.overdueBlockers.length}</strong> past their due date.</p>
             ) : null}
             <Link className="secondary-button" href={`/projects/${id}/blockers`}>Open blockers</Link>
+          </section>
+
+          <section className="surface-card admin-section" aria-labelledby="ov-shortages">
+            <h2 id="ov-shortages">Material shortages</h2>
+            {shortages.length === 0 ? (
+              <p className="admin-empty">No material below its reorder threshold.</p>
+            ) : (
+              <ul>
+                {shortages.map((s) => (
+                  <li key={s.materialId}>
+                    <Link href={`/projects/${id}/materials/${s.materialId}`}>{s.name}</Link>{" "}
+                    — {s.currentStock} {s.unit} (reorder at {s.reorderThreshold})
+                  </li>
+                ))}
+              </ul>
+            )}
+            <Link className="secondary-button" href={`/projects/${id}/materials`}>Open materials</Link>
           </section>
 
           <section className="surface-card admin-section" aria-labelledby="ov-milestones">

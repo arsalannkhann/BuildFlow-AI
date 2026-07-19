@@ -1,4 +1,5 @@
 import type { DprStructuredData } from "@buildflow/domain/dpr/schema";
+import type { ChallanExtraction, InvoiceExtraction } from "./documents/schema";
 
 export type TranscriptSegment = { text: string; startMs: number; endMs: number };
 export type TranscriptResult = { text: string; segments: TranscriptSegment[]; language: string };
@@ -12,4 +13,14 @@ export interface ExtractionPort {
 }
 export interface SummaryPort {
   summarize(input: { data: DprStructuredData }): Promise<{ internal: string; clientSafe: string }>;
+}
+
+// Commercial-document OCR (Phase D). Returns null when the input is unsupported
+// (non-image media, unreadable document) — callers mark the receipt/invoice
+// "unsupported" and the human enters lines manually. Output is always validated
+// against the versioned schema before anything is persisted.
+export interface DocumentExtractionPort {
+  readonly meta: { provider: string; model: string; promptVersion: string };
+  extractChallan(input: { imageBytes: Uint8Array; contentType: string }): Promise<ChallanExtraction | null>;
+  extractInvoice(input: { imageBytes: Uint8Array; contentType: string }): Promise<InvoiceExtraction | null>;
 }
