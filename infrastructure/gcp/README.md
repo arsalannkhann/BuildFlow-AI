@@ -76,10 +76,13 @@ is stored in GitHub. Repository variables contain only non-secret resource ident
 - `GCP_DEPLOY_SERVICE_ACCOUNT`
 
 The deployer has Cloud Build editor, Cloud Run administrator, Artifact Registry reader, Cloud
-SQL viewer, Secret Manager viewer and Service Usage consumer roles. It can act as only the two
-BuildFlow runtime service accounts when updating Cloud Run and as the project's Cloud Build
-execution account when submitting a build. Runtime access to database credentials, evidence and
-Gemini remains on the runtime identities rather than the GitHub identity.
+SQL viewer, Secret Manager viewer, Storage Bucket viewer and Service Usage consumer roles. The
+bucket viewer can only discover bucket names and metadata. On the Cloud Build source bucket,
+the deployer can manage the temporary source archives required by `gcloud builds submit`; it
+cannot administer that bucket or its IAM policy. It can act as only the two BuildFlow runtime
+service accounts when updating Cloud Run and as the project's Cloud Build execution account
+when submitting a build. Runtime access to database credentials, evidence and Gemini remains
+on the runtime identities rather than the GitHub identity.
 
 The same release path can be invoked manually from an authenticated workstation:
 

@@ -126,7 +126,8 @@ jobs:
         uses: google-github-actions/setup-gcloud@v3
         with:
           project_id: ${{ vars.GCP_PROJECT_ID }}
-          version: ">= 550.0.0"
+          # Cloud Run worker pools are available in the stable CLI from this release.
+          version: ">= 568.0.0"
 
       - name: Build, migrate, deploy, and smoke test
         id: deploy
