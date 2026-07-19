@@ -17,6 +17,7 @@
     "@buildflow/db": "workspace:*",
     "@buildflow/domain": "workspace:*",
     "@buildflow/jobs": "workspace:*",
+    "@buildflow/notify": "workspace:*",
     "@buildflow/pdf": "workspace:*",
     "@buildflow/pipeline": "workspace:*",
     "@buildflow/storage": "workspace:*",

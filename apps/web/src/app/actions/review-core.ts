@@ -12,12 +12,15 @@ import { addIssued, latestIssued } from "@buildflow/db/queries/issued";
 import { audit } from "@buildflow/db/queries/audit";
 import { renderDprPdf, TEMPLATE_VERSION } from "@buildflow/pdf/render";
 import type { DprStructuredData } from "@buildflow/domain/dpr/schema";
+import { emitEvent } from "@/core/notifications-core";
 
 export async function approveReport(db: AppDb, ctx: TenantContext, reportId: string): Promise<void> {
   assertCan(ctx, "report.approve");
   await setReportStatus(db, ctx, reportId, "APPROVED");
   await recordDecision(db, ctx, { reportId, decision: "approve" });
   await audit(db, ctx, { action: "report.approved", subjectRef: reportId });
+  const report = await getReport(db, ctx, reportId); // Phase E1 hook: field team learns the outcome
+  await emitEvent(db, ctx, { eventKind: "report.approved", subjectRef: reportId, projectId: report.projectId, title: `DPR ${report.reportDate} approved` });
 }
 
 export async function requestChanges(db: AppDb, ctx: TenantContext, reportId: string, reason: string): Promise<void> {
@@ -25,6 +28,8 @@ export async function requestChanges(db: AppDb, ctx: TenantContext, reportId: st
   await setReportStatus(db, ctx, reportId, "REJECTED");
   await recordDecision(db, ctx, { reportId, decision: "reject", reason });
   await audit(db, ctx, { action: "report.rejected", subjectRef: reportId, metadata: { reason } });
+  const report = await getReport(db, ctx, reportId); // Phase E1 hook (title/ref only — no reason text in the body)
+  await emitEvent(db, ctx, { eventKind: "report.rejected", subjectRef: reportId, projectId: report.projectId, title: `Changes requested on DPR ${report.reportDate}` });
 }
 
 export async function issueReport(db: AppDb, storage: StoragePort, ctx: TenantContext, reportId: string): Promise<string> {

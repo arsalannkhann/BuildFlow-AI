@@ -11,6 +11,7 @@ import {
   updateMbEntry, type MbEntry,
 } from "@buildflow/db/queries/mb";
 import { audit } from "@buildflow/db/queries/audit";
+import { emitEvent } from "@/core/notifications-core";
 
 // Measurement Book (e-MB Preview) — NOT legally authoritative (memory.md: pending legal
 // review; rules.md §11: AI may never finalize an MB entry — every transition here is a
@@ -88,6 +89,8 @@ export async function submitMbEntry(db: AppDb, ctx: TenantContext, entryId: stri
   if (entry.status !== "draft") throw new Error("Only draft entries can be submitted");
   await updateMbEntry(db, ctx, entryId, { status: "submitted", submittedAt: new Date() });
   await audit(db, ctx, { action: "mb.entry_submitted", subjectRef: entryId, metadata: {} });
+  // Phase E1 hook: verifiers (mb.verify) learn an entry awaits verification.
+  await emitEvent(db, ctx, { eventKind: "mb.awaiting_verification", subjectRef: entryId, projectId: entry.projectId, title: `MB entry #${entry.mbNumber} awaits verification` });
 }
 
 export async function verifyMbEntry(db: AppDb, ctx: TenantContext, entryId: string): Promise<void> {

@@ -226,6 +226,29 @@ textarea:focus-visible {
   color: white;
 }
 
+/* Phase E1: notification bell + unread count in the header */
+.app-header__nav .header-bell {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.header-bell__count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--accent-600);
+  color: white;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+
 .user-pill {
   display: flex;
   margin-left: 8px;

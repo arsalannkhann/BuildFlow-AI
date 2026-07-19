@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { HeaderStatus } from "./HeaderStatus";
 
 export function AppHeader({
   roleLabel,
@@ -36,6 +37,7 @@ export function AppHeader({
           <Link href="/reports">Reports</Link>
           <Link href="/projects">Projects</Link>
           <Link href="/organization">Organization</Link>
+          <HeaderStatus />
           {canCapture && (
             <Link href="/capture" className="header-capture-link" aria-label="Start a new update">
               New update

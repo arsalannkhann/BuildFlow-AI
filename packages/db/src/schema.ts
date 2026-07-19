@@ -708,6 +708,52 @@ export const poLines = pgTable("po_line", {
 });
 
 
+// --- Phase E: notifications (docs/PHASE-E-DESIGN.md) ---
+// One row per recipient per event. Titles reference records; bodies stay operational —
+// NEVER report narrative, transcripts, or customer content (rules.md §14).
+
+export const notifications = pgTable("notification", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull(),
+  recipientUserId: text("recipient_user_id").notNull(),
+  eventKind: text("event_kind").notNull(), // catalog in @buildflow/notify/catalog
+  subjectRef: text("subject_ref").notNull(), // entity id the event is about
+  projectId: text("project_id"),
+  title: text("title").notNull(),
+  body: text("body"),
+  readAt: timestamp("read_at", { withTimezone: true }),
+  createdAt: ts(),
+});
+
+// External-channel delivery state. Delivery runs as a `notification.deliver` job on the
+// existing queue, so retry/backoff/dead-letter come free (ADR-0003); this row mirrors the
+// outcome for the UI ("sent via email", "failed — will retry", "could not be delivered").
+export const notificationDeliveries = pgTable("notification_delivery", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull(),
+  notificationId: text("notification_id").notNull(),
+  channel: text("channel").notNull(), // email | whatsapp
+  status: text("status").notNull().default("queued"), // queued | sent | failed | dead
+  attempts: integer("attempts").notNull().default(0),
+  lastError: text("last_error"),
+  providerMessageId: text("provider_message_id"),
+  createdAt: ts(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+// Per-user per-event per-channel opt in/out. Absent row = catalog default (in-app on for
+// everything; email on for review requests, rejections, failures; WhatsApp off).
+export const notificationPreferences = pgTable("notification_preference", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull(),
+  userId: text("user_id").notNull(),
+  eventKind: text("event_kind").notNull(),
+  channel: text("channel").notNull(), // inapp | email | whatsapp
+  enabled: boolean("enabled").notNull(),
+  createdAt: ts(),
+});
+
+
 export const dailyReports = pgTable("daily_report", {
   id: text("id").primaryKey(),
   organizationId: text("organization_id").notNull(),
@@ -839,6 +885,7 @@ export const schema = {
   labourContractors, labourAttendance, equipment, equipmentAssignments, equipmentLogs, equipmentServices,
   mbEntries, mbEvidence,
   rfqs, rfqItems, rfqQuotes, purchaseOrders, poLines,
+  notifications, notificationDeliveries, notificationPreferences,
   dailyReports, reportRevisions,
   attachments, evidenceLinks, processingRuns, processingStages, reviewDecisions,
   issuedDocuments, auditEvents,

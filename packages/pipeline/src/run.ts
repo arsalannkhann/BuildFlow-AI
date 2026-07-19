@@ -8,6 +8,7 @@ import { addRevision } from "@buildflow/db/queries/revisions";
 import { getReport, setReportStatus, setCurrentRevision } from "@buildflow/db/queries/reports";
 import { startRun, finishRun, recordStage } from "@buildflow/db/queries/processing";
 import { audit } from "@buildflow/db/queries/audit";
+import { notifyEvent } from "@buildflow/notify/emit";
 import { LocalFsStorage } from "@buildflow/storage/local-fs";
 
 export async function runProcessing(db: AppDb, ctx: TenantContext, reportId: string): Promise<void> {
@@ -62,6 +63,14 @@ export async function runProcessing(db: AppDb, ctx: TenantContext, reportId: str
 
     await finishRun(db, ctx, runId, "succeeded");
     await audit(db, ctx, { action: "report.processed", subjectRef: reportId, metadata: { runId } });
+    // Phase E1 hook: reviewers learn a draft is ready. Title carries a record reference
+    // only — never extracted content (rules.md §14). Deliver jobs land on this same
+    // queue, so the running drain loop / worker picks them up next.
+    const done = await getReport(db, ctx, reportId);
+    await notifyEvent(db, ctx, {
+      eventKind: "report.awaiting_review", subjectRef: reportId, projectId: done.projectId,
+      title: `DPR ${done.reportDate} is ready for review`,
+    });
   } catch (err) {
     const category = (err as { category?: string })?.category ?? "processing_error";
     // Move to a terminal state only if still mid-processing, so the report can never be
@@ -77,6 +86,11 @@ export async function runProcessing(db: AppDb, ctx: TenantContext, reportId: str
       await recordStage(db, runId, failedStage, "failed", 0, category);
       await finishRun(db, ctx, runId, "failed", category);
       await audit(db, ctx, { action: "report.processing_failed", subjectRef: reportId, metadata: { category, stage: failedStage } });
+      // Phase E1 hook: reviewers own the retry / manual-draft recovery path.
+      await notifyEvent(db, ctx, {
+        eventKind: "report.processing_failed", subjectRef: reportId, projectId: ctx.projectId,
+        title: "Report processing failed", body: `Failure category: ${category} (stage ${failedStage})`,
+      });
     } catch {
       // status is already PROCESSING_FAILED; swallow bookkeeping errors
     }

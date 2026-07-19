@@ -1,11 +1,14 @@
 import type { TenantContext } from "@buildflow/domain/tenancy";
 import type { JobRegistry } from "@buildflow/jobs/types";
+import { NOTIFICATION_DELIVER_JOB } from "@buildflow/notify/emit";
+import { deliverNotification } from "@buildflow/notify/deliver";
 import { runProcessing } from "./run";
 import { runChallanExtraction } from "./extract-documents";
 import { runInvoiceExtraction } from "./extract-invoice";
 
 export const REPORT_PROCESS_JOB = "report.process";
 export const DOCUMENT_EXTRACT_JOB = "document.extract";
+export { NOTIFICATION_DELIVER_JOB };
 
 // System-context jobs: the pipeline re-reads everything tenant-scoped through the
 // organization filter; it performs no capability-gated actions itself, so the restored
@@ -33,5 +36,9 @@ export const pipelineJobRegistry: JobRegistry = {
     } else {
       throw new Error(`Unknown documentKind: ${kind}`);
     }
+  },
+  // Notification delivery (Phase E1): retry/backoff/dead-letter come from this queue.
+  [NOTIFICATION_DELIVER_JOB]: async (db, payload, meta) => {
+    await deliverNotification(db, payload, meta);
   },
 };

@@ -10,6 +10,7 @@ import {
 } from "@buildflow/db/queries/invoices";
 import { getCostCode } from "@buildflow/db/queries/budgets";
 import { audit } from "@buildflow/db/queries/audit";
+import { emitEvent } from "@/core/notifications-core";
 import { enqueueJob } from "@buildflow/jobs/queue";
 import { drainJobs } from "@buildflow/jobs/runner";
 import { pipelineJobRegistry, DOCUMENT_EXTRACT_JOB } from "@buildflow/pipeline/jobs";
@@ -65,6 +66,8 @@ export async function createInvoice(db: AppDb, storage: StoragePort, ctx: Tenant
   });
 
   if (inlineJobs()) await drainJobs(db, pipelineJobRegistry);
+  // Phase E1 hook: accountants (invoice.review) learn a draft invoice needs review.
+  await emitEvent(db, ctx, { eventKind: "invoice.awaiting_review", subjectRef: invoiceId, projectId: input.projectId, title: `Invoice ${input.invoiceNumber?.trim() || "(number pending review)"} awaits review` });
   return invoiceId;
 }
 

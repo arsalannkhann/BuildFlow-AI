@@ -13,6 +13,7 @@ import {
 } from "@buildflow/db/queries/controls";
 import { getReport, listReports } from "@buildflow/db/queries/reports";
 import { audit } from "@buildflow/db/queries/audit";
+import { emitEvent } from "@/core/notifications-core";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const assertDate = (v: string | null | undefined, label: string) => {
@@ -122,6 +123,8 @@ export async function raiseBlocker(db: AppDb, ctx: TenantContext, input: {
   assertDate(input.dueDate, "Due date");
   const row = await addBlocker(db, ctx, { ...input, title: input.title.trim() });
   await audit(db, ctx, { action: "blocker.raised", subjectRef: row.id, metadata: { severity: row.severity } });
+  // Phase E1 hook: blocker owners hear about new blockers (title + severity only).
+  await emitEvent(db, ctx, { eventKind: "blocker.raised", subjectRef: row.id, projectId: input.projectId, title: `Blocker raised: ${row.title}`, body: `Severity: ${row.severity}` });
   return row.id;
 }
 

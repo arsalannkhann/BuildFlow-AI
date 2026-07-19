@@ -11,6 +11,7 @@ import {
 } from "@buildflow/db/queries/procurement";
 import { getSupplier } from "@buildflow/db/queries/materials";
 import { audit } from "@buildflow/db/queries/audit";
+import { emitEvent } from "@/core/notifications-core";
 
 // RFQ -> manual supplier quotes -> comparison -> PO draft -> approved -> exported.
 // Purchase orders are NEVER sent automatically (rules.md §11: AI/system may not create or
@@ -27,6 +28,8 @@ export async function createRfq(db: AppDb, ctx: TenantContext, input: {
   if (input.neededBy && !DATE_RE.test(input.neededBy)) throw new Error("Needed-by must be YYYY-MM-DD");
   const row = await addRfq(db, ctx, { ...input, title: input.title.trim() });
   await audit(db, ctx, { action: "procurement.rfq_created", subjectRef: row.id, metadata: {} });
+  // Phase E1 hook: procurement colleagues record manual supplier quotes on this RFQ.
+  await emitEvent(db, ctx, { eventKind: "rfq.quote_requested", subjectRef: row.id, projectId: input.projectId, title: `Quotes requested: ${row.title}` });
   return row.id;
 }
 
@@ -120,6 +123,8 @@ export async function createPoDraftFromRfq(db: AppDb, ctx: TenantContext, input:
     action: "procurement.po_drafted", subjectRef: po.id,
     metadata: { poNumber: po.poNumber, rfqId: rfq.id, lines: lines.length },
   });
+  // Phase E1 hook: approvers (procurement.approve) learn a PO draft awaits approval.
+  await emitEvent(db, ctx, { eventKind: "po.awaiting_approval", subjectRef: po.id, projectId: rfq.projectId, title: `PO #${po.poNumber} awaits approval` });
   return po.id;
 }
 

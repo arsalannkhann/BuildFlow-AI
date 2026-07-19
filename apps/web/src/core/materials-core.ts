@@ -11,6 +11,7 @@ import {
   updateReceiptLine,
 } from "@buildflow/db/queries/materials";
 import { audit } from "@buildflow/db/queries/audit";
+import { emitShortageIfBelow } from "@/core/notifications-core";
 import { enqueueJob } from "@buildflow/jobs/queue";
 import { drainJobs } from "@buildflow/jobs/runner";
 import { pipelineJobRegistry, DOCUMENT_EXTRACT_JOB } from "@buildflow/pipeline/jobs";
@@ -235,6 +236,10 @@ export async function recordStockMovement(db: AppDb, ctx: TenantContext, input: 
     quantity, unit: material.unit, sourceKind: "manual", note: input.note ?? null,
   });
   await audit(db, ctx, { action: "material.stock_recorded", subjectRef: input.materialId, metadata: { kind: input.kind, quantity } });
+  // Phase E1 hook: deterministic shortage detection after outgoing/adjusting movements.
+  if (["issued", "consumed", "adjusted"].includes(input.kind)) {
+    await emitShortageIfBelow(db, ctx, input.projectId, input.materialId);
+  }
 }
 
 // --- deterministic shortage alerts (project overview) ---
