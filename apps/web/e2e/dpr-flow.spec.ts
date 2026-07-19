@@ -1,4 +1,12 @@
 import { test, expect } from "@playwright/test";
+import AxeBuilder from "@axe-core/playwright";
+
+async function expectAccessible(page: import("@playwright/test").Page) {
+  const results = await new AxeBuilder({ page }).withTags([
+    "wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa",
+  ]).analyze();
+  expect(results.violations, results.violations.map((item) => `${item.id}: ${item.help}`).join("\n")).toEqual([]);
+}
 
 test("capture -> process -> review -> approve -> issue -> download", async ({ page, context }) => {
   await context.grantPermissions(["microphone"]);
@@ -49,6 +57,7 @@ test("capture -> process -> review -> approve -> issue -> download", async ({ pa
   // "Casting of column C4" appears twice on the review page (the work-item card AND the
   // raw transcript text) — .first() avoids a strict-mode multi-match violation.
   await expect(page.getByText(/Casting of column C4/i).first()).toBeVisible();
+  await expectAccessible(page);
   const reportUrl = page.url();
   const reportId = reportUrl.split("/reports/")[1];
 
@@ -63,6 +72,7 @@ test("capture -> process -> review -> approve -> issue -> download", async ({ pa
   // exact:true targets the status badge ("ISSUED"); a plain substring match would also hit
   // the "Download issued PDF" link and trip Playwright's strict-mode check.
   await expect(page.getByText("ISSUED", { exact: true })).toBeVisible({ timeout: 30000 });
+  await expectAccessible(page);
 
   // Issued PDF is retrievable (same cookie session as the page).
   const pdf = await page.request.get(`/api/reports/${reportId}/pdf`);

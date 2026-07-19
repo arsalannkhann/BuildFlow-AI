@@ -14,4 +14,8 @@ test("put returns checksum + size and get round-trips; originals are immutable",
   expect(new TextDecoder().decode(await store.get("audio/x.webm"))).toBe("hello");
   expect(await store.exists("audio/x.webm")).toBe(true);
   await expect(store.put("audio/x.webm", bytes, "audio/webm")).rejects.toThrow(/immutable|exists/i);
+  expect(await store.list("audio")).toEqual(["audio/x.webm"]);
+  await expect(store.put("../escape.txt", bytes, "text/plain")).rejects.toThrow(/escapes/i);
+  await store.delete("audio/x.webm");
+  expect(await store.exists("audio/x.webm")).toBe(false);
 });

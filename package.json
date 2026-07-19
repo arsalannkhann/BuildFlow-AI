@@ -10,7 +10,10 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "pnpm --filter @buildflow/web test:e2e",
-    "db:generate": "pnpm --filter @buildflow/db db:generate"
+    "db:generate": "pnpm --filter @buildflow/db db:generate",
+    "seed:demo": "pnpm --filter @buildflow/db seed:demo",
+    "secrets:scan": "node scripts/check-secrets.mjs",
+    "verify:release": "pnpm secrets:scan && pnpm typecheck && pnpm test && pnpm build && pnpm test:e2e"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

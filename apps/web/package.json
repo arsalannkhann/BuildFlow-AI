@@ -17,7 +17,9 @@
     "@buildflow/db": "workspace:*",
     "@buildflow/domain": "workspace:*",
     "@buildflow/jobs": "workspace:*",
+    "@buildflow/lifecycle": "workspace:*",
     "@buildflow/notify": "workspace:*",
+    "@buildflow/observability": "workspace:*",
     "@buildflow/pdf": "workspace:*",
     "@buildflow/pipeline": "workspace:*",
     "@buildflow/storage": "workspace:*",
@@ -27,6 +29,7 @@
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.10.2",
     "@playwright/test": "^1.48.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",

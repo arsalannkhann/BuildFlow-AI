@@ -2,7 +2,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { getDb } from "@buildflow/db/client";
-import { LocalFsStorage } from "@buildflow/storage/local-fs";
+import { getStorage } from "@buildflow/storage/factory";
 import { currentContext } from "@/app/session";
 import {
   addMbEvidencePhoto, certifyMbEntry, correctMbEntry, createMbEntry, editMbEntry,
@@ -104,7 +104,7 @@ export async function addMbEvidenceAction(formData: FormData): Promise<void> {
   const upload = formData.get("photo") as File | null;
   if (!upload || upload.size === 0) throw new Error("Choose a photo");
   const capturedAt = opt(formData, "capturedAt");
-  await addMbEvidencePhoto(db, ctx, new LocalFsStorage(), {
+  await addMbEvidencePhoto(db, ctx, getStorage(), {
     entryId,
     bytes: new Uint8Array(await upload.arrayBuffer()),
     fileName: upload.name,

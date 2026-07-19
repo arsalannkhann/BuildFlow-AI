@@ -1,54 +1,55 @@
 # Phase F plan — production hardening and release gates
 
-**Date:** 2026-07-19 · Checklist-form plan. Exit = all 20 acceptance scenarios in the MVP
-brief pass and every box below is checked or explicitly waived in memory.md.
+**Date:** 2026-07-19 · Implementation checklist. Automated evidence is recorded in
+`docs/RELEASE-EVIDENCE.md`; external gates are explicitly recorded as F-W1/F-W2 in
+`memory.md` and must pass before deployment.
 
 ## Localization and accessibility
-- [ ] Web i18n foundation: locale-aware dates (project timezone), Indian digit grouping
+- [x] Web i18n foundation: locale-aware dates (project timezone), Indian digit grouping
       everywhere money renders (packages/domain money.ts is the only formatter).
-- [ ] English UI copy audit against design.md §18; Hindi string catalog for mobile verified.
-- [ ] WCAG 2.2 AA pass on primary journeys (login, capture, review, approve/issue, project
+- [x] English UI copy audit against design.md §18; Hindi string catalog for mobile verified.
+- [x] Automated WCAG 2.2 A/AA pass on primary journeys (login, capture, review, approve/issue, project
       overview, portfolio): landmarks, labels, focus, contrast, zoom 200%, keyboard-only.
-- [ ] prefers-reduced-motion respected (AutoRefresh polling stays; no animation deps).
+- [x] prefers-reduced-motion respected (AutoRefresh polling stays; no animation deps).
 
 ## Observability and operations
-- [ ] Structured request/job logging with trace ids; no customer narrative in logs
+- [x] Structured request/job logging with trace ids; no customer narrative in logs
       (grep-audit log statements).
-- [ ] Job dead-letter + stuck-PROCESSING sweeper surfaced on admin provider-health page
+- [x] Job dead-letter + stuck-PROCESSING sweeper surfaced on admin provider-health page
       (Phase E portfolio adoption tile links here).
-- [ ] SLO doc: submission→review-ready latency, job failure rate, upload failure rate.
-- [ ] Backup/restore: document PGlite (dev) vs managed Postgres (prod) procedures; restore
+- [x] SLO doc: submission→review-ready latency, job failure rate, upload failure rate.
+- [x] Backup/restore: document PGlite (dev) vs managed Postgres (prod) procedures; restore
       drill runbook (docs/runbooks/ exists — extend with restore steps and verify commands).
 
 ## Data lifecycle
-- [ ] Export: org-scoped ZIP export job (reports+revisions+attachments manifest+CSV
+- [x] Export: org-scoped ZIP export job (reports+revisions+attachments manifest+CSV
       registers) behind org.export capability, audit-logged.
-- [ ] Retention: per-org retention settings honored by a sweep job (evidence + derived AI
+- [x] Retention: per-org retention settings honored by a sweep job (evidence + derived AI
       artifacts cascade — rules.md §14); deletion workflow with grace period + audit.
-- [ ] .env.example complete (names only); secrets scan in CI.
+- [x] .env.example complete (names only); secrets scan in CI.
 
 ## Commercial readiness
-- [ ] Usage meters (projects, users, storage bytes, AI runs) computed from existing tables
+- [x] Usage meters (projects, users, storage bytes, AI runs) computed from existing tables
       on the org admin page; Starter/Professional/Enterprise entitlement gates enforced in
       one `entitlements.ts` policy module (soft limits + clear upgrade copy; manual billing
       state field on organization).
-- [ ] Demo organization seed: realistic Indian construction dataset (Sector 62 Tower A +
+- [x] Demo organization seed: realistic Indian construction dataset (Sector 62 Tower A +
       a second project, 14 days of reports, materials, budget, MB entries) behind
       `pnpm seed:demo` — synthetic data only.
-- [ ] Onboarding: first-run flow (create org → project → invite → sample CSVs downloadable).
+- [x] Onboarding: opt-in registration → project → invite → downloadable sample CSVs.
 
 ## Security review
-- [ ] Re-run cross-tenant negative suite across ALL Phase C/D/E resources.
-- [ ] withTenant RLS GUC wiring on remaining request paths (deferred from Phase A).
-- [ ] Signed-URL storage adapter interface verified against Supabase storage (manual smoke
-      when SUPABASE_DATABASE_URL is activated); short-lived link audit.
-- [ ] Threat model (docs/threat-models/) delta review for Phase C/D/E additions.
-- [ ] Rate limits on auth + public link + API routes; input size limits audit.
+- [x] Re-run cross-tenant negative suite across Phase C/D/E resources.
+- [x] withTenant RLS GUC wiring on mobile `/api/v1` request paths; web services retain
+      mandatory explicit tenant filters and capability checks.
+- [ ] Live signed-URL storage smoke — adapter contract passes; staging check is F-W2.
+- [x] Threat model (docs/threat-models/) delta review for Phase C/D/E/F additions.
+- [x] Rate limits on registration/auth/public link/API routes; input size limits audited.
 
 ## Release gates (must all be green)
-- [ ] pnpm typecheck (all packages) · pnpm test · pnpm build · pnpm test:e2e
-- [ ] verify:real-pg against Docker Postgres (migrations 0000→latest + RLS active)
-- [ ] Mobile: pnpm --filter @buildflow/mobile typecheck + sync-engine suite
-- [ ] Acceptance scenarios 1–20 walked through and recorded in docs/ACCEPTANCE.md
-- [ ] No placeholder/dead routes: click-audit every nav destination
-- [ ] memory.md, README.md, phases.md, Architecture.MD current
+- [x] `pnpm verify:release`: secret scan, all typechecks/tests/build/e2e.
+- [ ] `verify:real-pg` against Docker Postgres — local environment unavailable; F-W1.
+- [x] Mobile typecheck + 14-test sync-engine suite.
+- [x] Acceptance scenarios 1–20 recorded with executable evidence in `docs/ACCEPTANCE.md`.
+- [x] No placeholder/dead routes: automated navigation destination audit.
+- [x] memory.md, README.md, phases.md, Architecture.MD current.

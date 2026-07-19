@@ -12,6 +12,8 @@ terraform {
 variable "project" { type = string }
 variable "web_image" { type = string }
 variable "worker_image" { type = string }
+variable "supabase_url" { type = string }
+variable "supabase_storage_bucket" { type = string }
 
 locals {
   region = "asia-south1" # Mumbai — approved India region (Architecture.MD §6)
@@ -40,6 +42,7 @@ module "secrets" {
     "SUPABASE_SERVICE_ROLE_KEY",
     "OPENAI_API_KEY",
     "SESSION_PEPPER",
+    "DELETION_RECEIPT_HMAC_KEY",
   ]
 }
 
@@ -67,9 +70,11 @@ module "web" {
   allow_unauthenticated = true
   min_instances         = 1
   env = {
-    NODE_ENV   = "production"
-    JOBS_MODE  = "worker"
-    AI_PROVIDER = "openai"
+    NODE_ENV                   = "production"
+    JOBS_MODE                  = "worker"
+    AI_PROVIDER                = "openai"
+    SUPABASE_URL               = var.supabase_url
+    SUPABASE_STORAGE_BUCKET    = var.supabase_storage_bucket
   }
   secret_env = {
     DATABASE_URL              = "DATABASE_URL"
@@ -88,12 +93,16 @@ module "worker" {
   min_instances         = 1
   max_instances         = 2
   env = {
-    NODE_ENV    = "production"
-    AI_PROVIDER = "openai"
+    NODE_ENV                   = "production"
+    AI_PROVIDER                = "openai"
+    SUPABASE_URL               = var.supabase_url
+    SUPABASE_STORAGE_BUCKET    = var.supabase_storage_bucket
   }
   secret_env = {
-    DATABASE_URL   = "DATABASE_URL"
-    OPENAI_API_KEY = "OPENAI_API_KEY"
+    DATABASE_URL                = "DATABASE_URL"
+    OPENAI_API_KEY              = "OPENAI_API_KEY"
+    SUPABASE_SERVICE_ROLE_KEY   = "SUPABASE_SERVICE_ROLE_KEY"
+    DELETION_RECEIPT_HMAC_KEY   = "DELETION_RECEIPT_HMAC_KEY"
   }
 }
 

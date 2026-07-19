@@ -11,6 +11,8 @@ import {
 } from "@buildflow/db/queries/invitations";
 import { addActivity, addLocation, listLocations } from "@buildflow/db/queries/reference";
 import { audit } from "@buildflow/db/queries/audit";
+import { getOrganizationSettings, organizationUsage } from "@buildflow/db/queries/organization";
+import { assertEntitled } from "@buildflow/domain/entitlements";
 
 export const LOCATION_KINDS = ["site", "building", "zone", "floor", "room"] as const;
 
@@ -24,6 +26,10 @@ export async function createProjectAsAdmin(
 ): Promise<string> {
   assertCan(ctx, "org.manage");
   if (!settings.name?.trim()) throw new Error("Project name is required");
+  const [organization, usage] = await Promise.all([
+    getOrganizationSettings(db, ctx.organizationId), organizationUsage(db, ctx.organizationId),
+  ]);
+  assertEntitled(organization.plan, organization.billingStatus, usage, "projects");
   const project = await createProject(db, ctx, { ...settings, name: settings.name.trim() });
   await audit(db, ctx, { action: "project.created", subjectRef: project.id, metadata: { name: project.name } });
   return project.id;
@@ -42,6 +48,10 @@ export async function inviteMember(db: AppDb, ctx: TenantContext, input: {
 }): Promise<{ token: string; expiresAt: Date }> {
   assertCan(ctx, input.projectId ? "project.members.manage" : "org.members.manage");
   if (input.projectId) await getProject(db, ctx, input.projectId); // tenant check
+  const [organization, usage] = await Promise.all([
+    getOrganizationSettings(db, ctx.organizationId), organizationUsage(db, ctx.organizationId),
+  ]);
+  assertEntitled(organization.plan, organization.billingStatus, usage, "users");
   const invitation = await createInvitation(db, ctx, input);
   await audit(db, ctx, {
     action: "member.invited", subjectRef: invitation.id,

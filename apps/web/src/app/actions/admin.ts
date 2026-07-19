@@ -14,6 +14,14 @@ import { addActivity, addLocation } from "@buildflow/db/queries/reference";
 import { removeMembership } from "@buildflow/db/queries/members";
 import { assertCan } from "@buildflow/domain/tenancy";
 import { audit } from "@buildflow/db/queries/audit";
+import { consumeRateLimit } from "@buildflow/db/queries/rate-limits";
+import { headers } from "next/headers";
+import { parseBillingStatus, parsePlan } from "@buildflow/domain/entitlements";
+import { getOrganizationSettings, updateOrganizationCommercialSettings } from "@buildflow/db/queries/organization";
+import { createOrganizationExportRequest } from "@buildflow/lifecycle/export";
+import {
+  approveOrganizationDeletion, cancelOrganizationDeletion, requestOrganizationDeletion,
+} from "@buildflow/lifecycle/deletion";
 
 const str = (fd: FormData, key: string): string => String(fd.get(key) ?? "").trim();
 const opt = (fd: FormData, key: string): string | null => str(fd, key) || null;
@@ -142,6 +150,12 @@ export async function acceptInviteAction(formData: FormData): Promise<void> {
   const db = await getDb();
   const token = str(formData, "token");
   const password = String(formData.get("password") ?? "");
+  const requestHeaders = await headers();
+  const ip = requestHeaders.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const limit = await consumeRateLimit(db, {
+    scope: "invite-accept", key: `${ip}:${token}`, limit: 20, windowMs: 15 * 60_000,
+  });
+  if (!limit.allowed) redirect(`/invite/${encodeURIComponent(token)}?error=limited`);
   const accepted = await acceptInvitationAndCreateAccount(db, {
     token,
     displayName: str(formData, "displayName"),
@@ -159,4 +173,76 @@ export async function acceptInviteAction(formData: FormData): Promise<void> {
     });
   }
   redirect("/reports");
+}
+
+export async function updateOrganizationSettingsAction(formData: FormData): Promise<void> {
+  const db = await getDb();
+  const ctx = await currentContext();
+  assertCan(ctx, "org.manage");
+  const retentionText = str(formData, "retentionDays");
+  const retentionDays = retentionText ? Number(retentionText) : null;
+  if (retentionDays !== null && (!Number.isInteger(retentionDays) || retentionDays < 30 || retentionDays > 3_650)) {
+    throw new Error("Retention must be between 30 days and 10 years");
+  }
+  await updateOrganizationCommercialSettings(db, ctx, {
+    plan: parsePlan(str(formData, "plan")),
+    billingStatus: parseBillingStatus(str(formData, "billingStatus")), retentionDays,
+  });
+  await audit(db, ctx, {
+    action: "organization.settings_updated", subjectRef: ctx.organizationId,
+    metadata: { fields: ["plan", "billingStatus", "retentionDays"] },
+  });
+  revalidatePath("/organization");
+}
+
+export async function requestOrganizationExportAction(): Promise<void> {
+  const db = await getDb();
+  const ctx = await currentContext();
+  await createOrganizationExportRequest(db, ctx);
+  revalidatePath("/organization");
+}
+
+export async function requestOrganizationDeletionAction(formData: FormData): Promise<void> {
+  const db = await getDb();
+  const ctx = await currentContext();
+  const organization = await getOrganizationSettings(db, ctx.organizationId);
+  if (str(formData, "organizationName") !== organization.name) {
+    throw new Error("Enter the organization name exactly to request deletion");
+  }
+  await requestOrganizationDeletion(db, ctx);
+  revalidatePath("/organization");
+}
+
+export async function approveOrganizationDeletionAction(): Promise<void> {
+  const db = await getDb();
+  const ctx = await currentContext();
+  await approveOrganizationDeletion(db, ctx);
+  revalidatePath("/organization");
+}
+
+export async function cancelOrganizationDeletionAction(): Promise<void> {
+  const db = await getDb();
+  const ctx = await currentContext();
+  await cancelOrganizationDeletion(db, ctx);
+  revalidatePath("/organization");
+}
+
+export async function createOnboardingProjectAction(formData: FormData): Promise<void> {
+  const db = await getDb();
+  const ctx = await currentContext();
+  await createProjectAsAdmin(db, ctx, {
+    name: str(formData, "name"), clientName: opt(formData, "clientName"),
+    timezone: str(formData, "timezone") || "Asia/Kolkata", address: opt(formData, "address"),
+  });
+  redirect("/onboarding?project=created");
+}
+
+export async function inviteOnboardingMemberAction(formData: FormData): Promise<void> {
+  const db = await getDb();
+  const ctx = await currentContext();
+  const invite = await inviteMember(db, ctx, {
+    email: opt(formData, "email") ?? undefined,
+    role: parseRole(str(formData, "role")), projectId: null,
+  });
+  redirect(`/onboarding?invited=${encodeURIComponent(invite.token)}`);
 }

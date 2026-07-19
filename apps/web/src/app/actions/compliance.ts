@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { getDb } from "@buildflow/db/client";
 import { resolveTenantContext } from "@buildflow/auth/context";
-import { LocalFsStorage } from "@buildflow/storage/local-fs";
+import { getStorage } from "@buildflow/storage/factory";
 import { currentContext } from "@/app/session";
 import {
   addCustomComplianceRequirement, createCompliancePack, exportCompliancePack,
@@ -85,6 +85,6 @@ export async function exportCompliancePackAction(formData: FormData): Promise<vo
   const projectId = str(formData, "projectId");
   const packId = str(formData, "packId");
   const { db, ctx } = await projectCtx(projectId);
-  const row = await exportCompliancePack(db, ctx, new LocalFsStorage(), packId);
+  const row = await exportCompliancePack(db, ctx, getStorage(), packId);
   redirect(`/api/projects/${projectId}/compliance/${packId}/exports/${row.id}`);
 }

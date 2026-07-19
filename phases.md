@@ -1,6 +1,6 @@
 # BuildFlow AI — Delivery Phases
 
-**Status:** Execution roadmap  
+**Status:** Engineering MVP release candidate; commercial discovery remains active
 **Last updated:** 2026-07-19  
 **Planning principle:** Exit gates determine progress; calendar dates do not.
 
@@ -51,13 +51,26 @@ compliance evidence packs (DPCC/GRAP/RERA) with checklists and versioned exports
 
 Exit gate passed: E1–E5 are implemented with capability enforcement, RLS migrations,
 cross-tenant and grounding tests, immutable export checksums, typecheck, and production build.
-Phase F is the active engineering phase.
+Phase F implementation followed.
 
-### Phase F — production hardening
+### Phase F — production hardening — implementation complete 2026-07-19
 Localization (en/hi), accessibility (WCAG 2.2 AA), performance, observability, retention/
 deletion/export, backup/restore documentation, onboarding + demo org with realistic Indian
 construction data, threat model, runbooks, OpenTofu infrastructure definitions, security
 review, remove placeholders, run all release gates and the 20 acceptance scenarios.
+
+Implemented: opt-in organization registration and onboarding, centralized plan entitlements
+and live usage meters, synthetic two-project demo seed, project-timezone dates, mobile Hindi
+catalog verification, WCAG/reflow and dead-navigation browser audits, trace-safe structured
+logs, provider/job health and stuck-run recovery, distributed rate limits, Supabase/local
+storage adapters, organization export, retention and two-owner/grace deletion, OpenAPI 3.1,
+SLO/restore/incident/lifecycle runbooks, threat-model delta, secret scanning and Node 22 CI.
+
+**Release state:** local `verify:release` is green and the 20 scenarios have executable
+evidence. Deployment sign-off is intentionally open until F-W1 (real PostgreSQL migration +
+RLS check), F-W2 (live India-region Supabase signed-URL smoke) and the mandatory second
+security/migration review pass. See `docs/RELEASE-EVIDENCE.md`; no downstream engineering
+phase should reinterpret these external gates as passed.
 
 ## 1. Operating model
 

@@ -1,7 +1,7 @@
 "use server";
 import { revalidatePath } from "next/cache";
 import { getDb } from "@buildflow/db/client";
-import { LocalFsStorage } from "@buildflow/storage/local-fs";
+import { getStorage } from "@buildflow/storage/factory";
 import { currentContext } from "@/app/session";
 import { approveReport, requestChanges, issueReport } from "./review-core";
 
@@ -20,7 +20,7 @@ export async function requestChangesAction(formData: FormData): Promise<void> {
 export async function issueAction(formData: FormData): Promise<void> {
   const db = await getDb(); const ctx = await currentContext();
   const reportId = String(formData.get("reportId"));
-  await issueReport(db, new LocalFsStorage(), ctx, reportId);
+  await issueReport(db, getStorage(), ctx, reportId);
   revalidatePath(`/reports/${reportId}`);
 }
 

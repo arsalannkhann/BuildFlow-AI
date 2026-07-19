@@ -170,8 +170,8 @@ export default async function PortfolioPage() {
           </table>
           <p>
             Background processing: {jobs.succeeded} succeeded · {jobs.queued} queued ·{" "}
-            <Link href="/reports">{jobs.retrying} retrying</Link> ·{" "}
-            <Link href="/reports">{jobs.dead} dead-lettered</Link>
+            <Link href="/organization/health">{jobs.retrying} retrying</Link> ·{" "}
+            <Link href="/organization/health">{jobs.dead} dead-lettered</Link>
             {" "}(failed reports appear in the review inbox for retry or manual draft).
           </p>
         </section>

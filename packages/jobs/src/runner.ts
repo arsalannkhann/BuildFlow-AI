@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import type { AppDb } from "@buildflow/db/client";
 import type { JobRegistry } from "./types";
+import { errorCategory, logEvent, withTrace } from "@buildflow/observability/logger";
 
 const LEASE_SECONDS = 120;
 const BACKOFF_BASE_SECONDS = 5;
@@ -67,19 +68,32 @@ async function failJob(db: AppDb, job: JobRow, error: unknown): Promise<void> {
 export async function runOnce(db: AppDb, registry: JobRegistry): Promise<boolean> {
   const job = await leaseNext(db);
   if (!job) return false;
-  const handler = registry[job.kind];
-  if (!handler) {
-    await failJob(db, { ...job, attempts: job.max_attempts }, new Error(`No handler for job kind: ${job.kind}`));
-    return true;
-  }
-  try {
-    await handler(db, job.payload, {
-      jobId: job.id, organizationId: job.organization_id, attempt: job.attempts,
-    });
-    await completeJob(db, job.id);
-  } catch (err) {
-    await failJob(db, job, err);
-  }
+  await withTrace(`job:${job.id}`, async () => {
+    const started = performance.now();
+    const fields = {
+      jobId: job.id, jobKind: job.kind, organizationId: job.organization_id,
+      attempt: job.attempts,
+    };
+    logEvent("info", "job.started", fields);
+    const handler = registry[job.kind];
+    if (!handler) {
+      await failJob(db, { ...job, attempts: job.max_attempts }, new Error(`No handler for job kind: ${job.kind}`));
+      logEvent("error", "job.dead", { ...fields, errorCategory: "unknown_job_kind" });
+      return;
+    }
+    try {
+      await handler(db, job.payload, {
+        jobId: job.id, organizationId: job.organization_id, attempt: job.attempts,
+      });
+      await completeJob(db, job.id);
+      logEvent("info", "job.completed", { ...fields, durationMs: Math.round(performance.now() - started) });
+    } catch (err) {
+      await failJob(db, job, err);
+      logEvent(job.attempts >= job.max_attempts ? "error" : "warn", job.attempts >= job.max_attempts ? "job.dead" : "job.retrying", {
+        ...fields, durationMs: Math.round(performance.now() - started), errorCategory: errorCategory(err),
+      });
+    }
+  });
   return true;
 }
 

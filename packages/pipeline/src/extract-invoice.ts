@@ -4,7 +4,7 @@ import { getAiRegistry } from "@buildflow/ai/registry";
 import { invoiceExtractionSchema, INVOICE_SCHEMA_VERSION } from "@buildflow/ai/documents/schema";
 import { addInvoiceLine, getInvoice, listInvoiceLines, updateInvoice } from "@buildflow/db/queries/invoices";
 import { audit } from "@buildflow/db/queries/audit";
-import { LocalFsStorage } from "@buildflow/storage/local-fs";
+import { getStorage } from "@buildflow/storage/factory";
 
 // Invoice OCR: lands DRAFT lines + header suggestions for human review (invoice.review).
 // It NEVER posts cost entries — approval is a separate, human, capability-gated action.
@@ -28,7 +28,7 @@ export async function runInvoiceExtraction(db: AppDb, ctx: TenantContext, invoic
   }
 
   try {
-    const imageBytes = await new LocalFsStorage().get(invoice.objectKey);
+    const imageBytes = await getStorage().get(invoice.objectKey);
     const raw = await ai.documents.extractInvoice({ imageBytes, contentType: invoice.contentType });
     if (raw === null) {
       await updateInvoice(db, ctx, invoiceId, { ...meta, ocrStatus: "unsupported" });

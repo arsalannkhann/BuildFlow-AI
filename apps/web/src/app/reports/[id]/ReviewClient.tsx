@@ -9,6 +9,7 @@ import {
 } from "@/app/actions/review";
 import { StatusBadge } from "@/app/components/StatusBadge";
 import { FieldDecisionPanel } from "./FieldDecisionPanel";
+import { formatProjectDate } from "@buildflow/domain/date-time";
 
 const bandStyle: Record<string, string> = {
   Supported: "review-band review-band--supported",
@@ -28,6 +29,8 @@ const sectionNumbers: Record<string, string> = {
 export function ReviewClient(props: {
   reportId: string;
   reportDate: string;
+  projectName: string;
+  projectTimezone: string;
   status: string;
   rows: FieldRow[];
   transcript: string;
@@ -50,12 +53,13 @@ export function ReviewClient(props: {
     });
     return Array.from(groups.entries());
   }, [props.rows]);
-  const reportDate = new Intl.DateTimeFormat("en-IN", {
+  const reportDate = formatProjectDate(props.reportDate, {
+    timeZone: props.projectTimezone,
     weekday: "long",
     day: "numeric",
     month: "long",
     year: "numeric",
-  }).format(new Date(`${props.reportDate}T12:00:00`));
+  });
 
   return (
     <main id="main-content" className="page-shell review-page">
@@ -69,7 +73,7 @@ export function ReviewClient(props: {
         <div>
           <p className="eyebrow">Daily Progress Report</p>
           <h1 className="page-title">Review before it becomes record.</h1>
-          <p className="page-lead">{reportDate} · Sector 62, Tower A</p>
+          <p className="page-lead">{reportDate} · {props.projectName}</p>
         </div>
         <div className="review-document-meta">
           <small>REPORT STATUS</small>
@@ -297,7 +301,7 @@ export function ReviewClient(props: {
           )}
           {(props.activeClientLinks ?? []).map((link) => (
             <form key={link.id} action={revokeClientLinkAction} className="admin-inline-form">
-              <span>Active link · expires {new Date(link.expiresAt).toLocaleDateString("en-IN")}</span>
+              <span>Active link · expires {formatProjectDate(link.expiresAt, { timeZone: props.projectTimezone })}</span>
               <input type="hidden" name="reportId" value={props.reportId} />
               <input type="hidden" name="linkId" value={link.id} />
               <button type="submit" className="secondary-button">Revoke</button>

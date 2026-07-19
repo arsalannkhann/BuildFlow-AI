@@ -2,6 +2,7 @@ import type { TenantContext } from "@buildflow/domain/tenancy";
 import type { JobRegistry } from "@buildflow/jobs/types";
 import { NOTIFICATION_DELIVER_JOB } from "@buildflow/notify/emit";
 import { deliverNotification } from "@buildflow/notify/deliver";
+import { lifecycleJobRegistry } from "@buildflow/lifecycle/jobs";
 import { runProcessing } from "./run";
 import { runChallanExtraction } from "./extract-documents";
 import { runInvoiceExtraction } from "./extract-invoice";
@@ -21,6 +22,7 @@ const systemCtx = (payload: Record<string, unknown>, organizationId: string): Te
 });
 
 export const pipelineJobRegistry: JobRegistry = {
+  ...lifecycleJobRegistry,
   [REPORT_PROCESS_JOB]: async (db, payload, meta) => {
     await runProcessing(db, systemCtx(payload, meta.organizationId), String(payload.reportId));
   },

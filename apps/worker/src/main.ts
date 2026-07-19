@@ -1,6 +1,9 @@
 import { getDb } from "@buildflow/db/client";
 import { runOnce } from "@buildflow/jobs/runner";
 import { pipelineJobRegistry } from "@buildflow/pipeline/jobs";
+import { errorCategory, logEvent } from "@buildflow/observability/logger";
+import { sweepStuckProcessing } from "@buildflow/db/queries/operations";
+import { enqueueRetentionSweeps } from "@buildflow/lifecycle/retention";
 
 const POLL_MS = 1000;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -8,10 +11,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 async function main(): Promise<void> {
   if (!process.env.DATABASE_URL) {
     // PGlite is a single-process database: a second process cannot share the data dir.
-    console.error(
-      "The worker requires DATABASE_URL (real PostgreSQL). " +
-      "In PGlite mode, leave JOBS_MODE=inline so the web app runs jobs itself (ADR-0003).",
-    );
+    logEvent("error", "worker.configuration_invalid", { errorCategory: "database_url_missing" });
     process.exit(1);
   }
   const db = await getDb();
@@ -20,17 +20,29 @@ async function main(): Promise<void> {
   process.on("SIGINT", stop);
   process.on("SIGTERM", stop);
 
-  console.log("buildflow-worker: started (poll %dms)", POLL_MS);
+  logEvent("info", "worker.started");
+  let lastSweep = 0;
+  let lastRetentionSchedule = 0;
   while (!stopping) {
     try {
+      if (Date.now() - lastSweep >= 60_000) {
+        const count = await sweepStuckProcessing(db);
+        if (count > 0) logEvent("warn", "processing.stuck_swept", { count });
+        lastSweep = Date.now();
+      }
+      if (Date.now() - lastRetentionSchedule >= 60 * 60_000) {
+        const count = await enqueueRetentionSweeps(db);
+        logEvent("info", "retention.sweeps_scheduled", { count });
+        lastRetentionSchedule = Date.now();
+      }
       const worked = await runOnce(db, pipelineJobRegistry);
       if (!worked) await sleep(POLL_MS);
     } catch (err) {
-      console.error("buildflow-worker: loop error", err);
+      logEvent("error", "worker.loop_failed", { errorCategory: errorCategory(err) });
       await sleep(POLL_MS);
     }
   }
-  console.log("buildflow-worker: stopped");
+  logEvent("info", "worker.stopped");
 }
 
 void main();

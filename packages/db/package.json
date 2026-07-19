@@ -9,7 +9,8 @@
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
     "db:generate": "drizzle-kit generate",
-    "verify:real-pg": "tsx scripts/verify-real-postgres.ts"
+    "verify:real-pg": "tsx scripts/verify-real-postgres.ts",
+    "seed:demo": "tsx scripts/seed-demo.ts"
   },
   "dependencies": {
     "@buildflow/domain": "workspace:*",

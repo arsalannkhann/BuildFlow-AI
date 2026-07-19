@@ -7,6 +7,14 @@ export const organizations = pgTable("organization", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   settings: jsonb("settings").$type<Record<string, unknown>>(),
+  plan: text("plan").notNull().default("starter"), // starter | professional | enterprise
+  billingStatus: text("billing_status").notNull().default("trial"), // trial | active | past_due | paused
+  retentionDays: integer("retention_days"), // null = retain until an owner configures a policy
+  deletionRequestedAt: timestamp("deletion_requested_at", { withTimezone: true }),
+  deletionExecuteAfter: timestamp("deletion_execute_after", { withTimezone: true }),
+  deletionRequestedBy: text("deletion_requested_by"),
+  deletionApprovedAt: timestamp("deletion_approved_at", { withTimezone: true }),
+  deletionApprovedBy: text("deletion_approved_by"),
   createdAt: ts(),
 });
 
@@ -75,6 +83,17 @@ export const jobs = pgTable("job", {
   lastError: text("last_error"),
   createdAt: ts(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+// Distributed fixed-window counters for authentication/public/API throttles. Keys are
+// SHA-256 hashes (never raw email, token, or IP); this is system state, not tenant data.
+export const rateLimitBuckets = pgTable("rate_limit_bucket", {
+  id: text("id").primaryKey(),
+  scope: text("scope").notNull(),
+  keyHash: text("key_hash").notNull(),
+  windowStart: timestamp("window_start", { withTimezone: true }).notNull(),
+  count: integer("count").notNull().default(1),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
 });
 
 
@@ -842,6 +861,34 @@ export const complianceExports = pgTable("compliance_export", {
 });
 
 
+// --- Phase F: organization lifecycle ---
+
+export const organizationExports = pgTable("organization_export", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull(),
+  status: text("status").notNull().default("queued"), // queued | running | succeeded | failed
+  objectKey: text("object_key"),
+  checksum: text("checksum"),
+  byteSize: bigint("byte_size", { mode: "number" }),
+  errorCategory: text("error_category"),
+  requestedBy: text("requested_by").notNull(),
+  createdAt: ts(),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+});
+
+// Non-customer receipt retained after an organization is destroyed. It contains only a
+// one-way org hash, aggregate counts, approver/requester hashes, and completion time.
+export const deletionReceipts = pgTable("deletion_receipt", {
+  id: text("id").primaryKey(),
+  organizationHash: text("organization_hash").notNull(),
+  requestedByHash: text("requested_by_hash").notNull(),
+  approvedByHash: text("approved_by_hash").notNull(),
+  deletedRows: integer("deleted_rows").notNull(),
+  deletedObjects: integer("deleted_objects").notNull(),
+  completedAt: ts("completed_at"),
+});
+
+
 export const dailyReports = pgTable("daily_report", {
   id: text("id").primaryKey(),
   organizationId: text("organization_id").notNull(),
@@ -964,7 +1011,7 @@ export const auditEvents = pgTable("audit_event", {
 });
 
 export const schema = {
-  organizations, users, authCredentials, sessions, projects, memberships, jobs,
+  organizations, users, authCredentials, sessions, projects, memberships, jobs, rateLimitBuckets,
   locations, activities, invitations, clientLinks,
   scheduleItems, scheduleDependencies, progressUpdates, blockers, rfis, rfiResponses,
   documents, documentRevisions, reportActivityLinks,
@@ -976,6 +1023,7 @@ export const schema = {
   notifications, notificationDeliveries, notificationPreferences,
   searchDocuments, searchEmbeddings,
   compliancePacks, complianceRequirements, complianceExports,
+  organizationExports, deletionReceipts,
   dailyReports, reportRevisions,
   attachments, evidenceLinks, processingRuns, processingStages, reviewDecisions,
   issuedDocuments, auditEvents,

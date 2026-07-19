@@ -28,6 +28,8 @@ class MemoryStorage implements StoragePort {
     return bytes;
   }
   async exists(key: string) { return this.objects.has(key); }
+  async delete(key: string) { this.objects.delete(key); }
+  async list(prefix: string) { return [...this.objects.keys()].filter((key) => key.startsWith(prefix)).sort(); }
 }
 
 const fakeCover = async (input: { status: "DRAFT" | "REVIEWED"; version: number }) =>

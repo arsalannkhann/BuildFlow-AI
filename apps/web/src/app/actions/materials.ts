@@ -2,7 +2,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { getDb } from "@buildflow/db/client";
-import { LocalFsStorage } from "@buildflow/storage/local-fs";
+import { getStorage } from "@buildflow/storage/factory";
 import { parseINRToPaise } from "@buildflow/domain/money";
 import { currentContext } from "@/app/session";
 import {
@@ -60,7 +60,7 @@ export async function createReceiptAction(formData: FormData): Promise<void> {
   const projectId = str(formData, "projectId");
   const { db, ctx } = await projectCtx(projectId);
   const upload = formData.get("photo") as File | null;
-  const receiptId = await createReceipt(db, new LocalFsStorage(), ctx, {
+  const receiptId = await createReceipt(db, getStorage(), ctx, {
     projectId,
     receiptDate: str(formData, "receiptDate"),
     supplierId: opt(formData, "supplierId"),

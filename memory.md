@@ -1,7 +1,7 @@
 # BuildFlow AI — Project Memory
 
 **Purpose:** Durable context for founders, contributors, and coding agents.  
-**Last updated:** 2026-07-13  
+**Last updated:** 2026-07-19
 **Update rule:** Keep this file concise, factual, dated, and consistent with the source documents.
 
 ## 1. Read order
@@ -23,15 +23,30 @@ BuildFlow AI is an India-first construction operations product. Its initial wedg
 
 ## 3. Current phase
 
-**Current engineering phase:** Phase F — production hardening (of the Phase A–F complete
-MVP plan in `phases.md` §0, decided 2026-07-19). Phases A–E are implemented.
+**Current engineering phase:** Phase F implementation complete; MVP release candidate
+awaiting environment-owned deployment gates and second review. Phases A–E are complete.
 **Commercial phase:** Phase 0 — field discovery and design partners (unchanged; runs in
 parallel and does not gate engineering).
 
 The DPR vertical slice was built and audited first (2026-07-13 → 2026-07-19; see
 `docs/GAP-ANALYSIS.md`), then expanded through project controls, commercial operations,
 notifications, portfolio/search, a cited read-only assistant, and compliance evidence packs.
-The repository-wide suite now covers 146 unit/integration tests; production hardening is next.
+The repository-wide candidate covers 164 unit/integration tests plus four Playwright
+journeys, a production build, secret scanning and 15 package typechecks.
+
+### Open Phase F gates / explicit local waivers
+
+- **F-W1 — real PostgreSQL:** not run locally because Docker Desktop and a local PostgreSQL
+  service are unavailable. CI or a Docker-enabled machine must apply migrations 0000→0011
+  and verify FORCE RLS before deployment.
+- **F-W2 — live Supabase Storage:** not run because no approved India-region bucket is
+  configured. Adapter contract tests pass; staging must verify signed upload/download,
+  expiry, scope, export-link audit and cleanup using synthetic data.
+- **Review:** migration 0011, RLS, auth/registration, retention and deletion changes require
+  a second qualified reviewer before merge or deployment (`rules.md`).
+
+These are recorded constraints, not passing results. Exact commands are in
+`docs/RELEASE-EVIDENCE.md`.
 
 ## 4. Current product decision
 
@@ -73,14 +88,16 @@ Do not lead early sales with “AI Operating System for Construction.” That la
 
 - Modular monolith plus asynchronous workers.
 - TypeScript for web, mobile, API, and shared contracts.
-- Python only for AI/document workers where it has a material ecosystem advantage.
 - Next.js App Router for web.
 - Expo React Native for the Android-first mobile app.
-- SQLite/SQLCipher for offline drafts and sync commands.
-- NestJS/Fastify for the API.
+- SQLite for offline drafts and idempotent sync commands; SQLCipher remains a production
+  mobile-build validation item.
+- Next.js route handlers/server actions provide the modular `/api/v1` API (ADR-0001).
 - PostgreSQL as the source of truth, including RLS, JSONB, `pgvector`, and PostGIS when needed.
-- Managed Supabase services initially, subject to production region and contract confirmation.
-- Cloud Run, Cloud Tasks, and object storage adapters for runtime and durable processing.
+- Managed PostgreSQL and private Supabase Storage are the initial deployment targets,
+  subject to India-region and contract confirmation; local mode uses PGlite/local FS.
+- A transactional database queue is the MVP durable runner; Cloud Tasks remains an adapter
+  option after measured need (ADR-0003).
 - OpenAI Responses API with Structured Outputs for the initial AI pipeline.
 - Speech provider selected through a field benchmark across OpenAI, Sarvam, and Bhashini.
 - HTML/CSS plus Playwright for issued PDF generation.
@@ -154,6 +171,35 @@ The source roadmap discusses RERA, DPCC Dust Portal, GRAP, Measurement Books, Ta
 - Derived AI artifacts inherit the source record’s access and deletion policy.
 
 ## 14. Decision log
+
+### 2026-07-19 — Phase F landed as an engineering release candidate
+
+**Product readiness:** opt-in, rate-limited organization registration atomically creates the
+tenant, owner membership, credential and audit event; onboarding creates the first project,
+invites a teammate and supplies location/activity templates. Starter/Professional/Enterprise
+entitlements and manual billing state share one policy module; live org meters cover projects,
+users, stored evidence and AI runs; `pnpm seed:demo` creates a synthetic two-project,
+14-day Indian construction dataset.
+
+**Security and operations:** production no longer seeds public demo credentials implicitly;
+demo role cards disappear outside demo mode; auth/public/API/upload rate and size limits use
+database counters with hashed keys. API requests and jobs carry trace-safe structured logs;
+stuck processing is failed safely; dead jobs/provider aggregates are visible on the owner
+health page. Migration 0011 adds lifecycle/commercial state, FORCE RLS and immutable audit/
+deletion controls. The threat model, SLO, incident, restore and data-lifecycle runbooks are
+current.
+
+**Lifecycle and storage:** local and Supabase storage adapters implement immutable puts,
+list/delete and short-lived signed access. Owners can request audited ZIP exports. Daily
+retention removes expired evidence and inherited transcripts/summaries/search derivatives.
+Deletion requires a distinct second owner, a seven-day grace period and a signed content-free
+receipt.
+
+**Quality:** project-timezone formatting, Hindi catalog verification, responsive onboarding,
+automated WCAG A/AA scans, keyboard access, 320px reflow and navigation dead-link audits are
+release gates. OpenAPI 3.1 and API usage docs are published. Local verification covers 63
+test files / 164 tests, production build and four browser journeys. F-W1/F-W2 and second
+review remain open; therefore the candidate is not yet approved for customer deployment.
 
 ### 2026-07-19 — Phase E landed: intelligence, notifications, and compliance evidence
 
@@ -374,10 +420,10 @@ For each change:
 
 ## 18. Immediate next actions
 
-1. Recruit three design partners in the defined ICP.
-2. Schedule site shadowing and collect consented DPR/audio/photo examples.
-3. Define and test the common DPR schema.
-4. Prototype the mobile capture and manager review flows.
-5. Run a concierge pilot before building the full processing platform.
-6. Benchmark OpenAI, Sarvam, and Bhashini on real noisy site audio.
-7. Measure current reporting time, correction severity, review latency, and willingness to pay.
+1. Obtain the mandatory second review of migration 0011, RLS, registration and lifecycle code.
+2. Run F-W1 on disposable real PostgreSQL and attach the successful CI/terminal evidence.
+3. Provision an approved India-region private Supabase bucket and complete F-W2 in staging.
+4. Exercise offline capture/restart/reconnect on a representative low-end Android device.
+5. Recruit three design partners and run consented site shadowing with synthetic data removed.
+6. Benchmark OpenAI, Sarvam and Bhashini on approved noisy field audio.
+7. Measure reporting effort, correction severity, review latency, paid intent and expansion.

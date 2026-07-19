@@ -3,8 +3,8 @@ import { capabilitiesForRole } from "@buildflow/domain/tenancy";
 import type { AppDb } from "./client";
 import { organizations, projects, users, memberships, authCredentials } from "./schema";
 
-// Demo credentials for the seeded local org. Real deployments create organizations through
-// onboarding; the demo password is public by design and only ever guards local demo data.
+// Demo credentials for the seeded local org. Production never seeds these implicitly;
+// the password is public by design and may only guard synthetic demo data.
 export const DEMO_PASSWORD = "buildflow-demo";
 
 export const SEED = {

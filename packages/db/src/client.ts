@@ -1,4 +1,5 @@
 import { join, isAbsolute } from "node:path";
+import { pathToFileURL } from "node:url";
 import { PGlite } from "@electric-sql/pglite";
 import { vector as pgliteVector } from "@electric-sql/pglite/vector";
 import { drizzle as drizzlePglite } from "drizzle-orm/pglite";
@@ -9,6 +10,19 @@ import { migrate as migratePg } from "drizzle-orm/node-postgres/migrator";
 import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 import { schema } from "./schema";
 import { migrationsDir, workspaceRoot } from "./workspace-root";
+
+// Next's server bundler rewrites the pgvector extension URL into `/_next/static`, while
+// PGlite's Node loader expects a filesystem asset. Point at the package-owned tarball
+// explicitly so dev/e2e and the unbundled test runner use the same deterministic source.
+const nodePgliteVector = {
+  ...pgliteVector,
+  setup: async (pg: Parameters<typeof pgliteVector.setup>[0], options: Parameters<typeof pgliteVector.setup>[1]) => ({
+    ...(await pgliteVector.setup(pg, options)),
+    bundlePath: pathToFileURL(join(
+      workspaceRoot(), "packages/db/node_modules/@electric-sql/pglite/dist/vector.tar.gz",
+    )),
+  }),
+};
 
 // One query surface over two drivers (ADR-0002): real PostgreSQL when DATABASE_URL is set
 // (Docker locally, managed in production), embedded PGlite otherwise (zero-dependency dev
@@ -31,7 +45,7 @@ export async function createDb(dataDir?: string): Promise<AppDb> {
   const resolved = isAbsolute(configured) ? configured : join(workspaceRoot(), configured);
   // pgvector ships inside PGlite; migration 0009 CREATEs the extension. Real PG images
   // (docker-compose, CI, Supabase) are pgvector-enabled already.
-  const pglite = new PGlite(resolved, { extensions: { vector: pgliteVector } });
+  const pglite = new PGlite(resolved, { extensions: { vector: nodePgliteVector } });
   const db = drizzlePglite(pglite, { schema });
   await migratePglite(db, { migrationsFolder: migrationsDir() });
   return db as unknown as AppDb;
@@ -51,7 +65,7 @@ export function getDb(): Promise<AppDb> {
 }
 
 export async function createTestDb(): Promise<AppDb> {
-  const pglite = new PGlite({ extensions: { vector: pgliteVector } }); // in-memory
+  const pglite = new PGlite({ extensions: { vector: nodePgliteVector } }); // in-memory
   const db = drizzlePglite(pglite, { schema });
   await migratePglite(db, { migrationsFolder: migrationsDir() });
   return db as unknown as AppDb;

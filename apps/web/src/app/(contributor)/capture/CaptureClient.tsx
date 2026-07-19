@@ -9,7 +9,7 @@ function formatDuration(totalSeconds: number): string {
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
-export function CaptureClient() {
+export function CaptureClient({ reportDate }: { reportDate: string }) {
   const [recording, setRecording] = useState(false);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [photos, setPhotos] = useState<File[]>([]);
@@ -98,7 +98,7 @@ export function CaptureClient() {
     setSubmitting(true);
     setStatus("Saved safely · Uploading your update…");
     const formData = new FormData();
-    formData.set("reportDate", new Date().toISOString().slice(0, 10));
+    formData.set("reportDate", reportDate);
     formData.set("audio", new File([audioBlob], "site-update.webm", { type: "audio/webm" }));
     photos.forEach((photo) => formData.append("photos", photo));
     const note = document.querySelector<HTMLTextAreaElement>("#capture-note")?.value.trim();
@@ -170,7 +170,7 @@ export function CaptureClient() {
           </div>
         )}
 
-        <div className="prompt-strip" aria-label="Suggested talking points">
+        <div className="prompt-strip" aria-label="Suggested talking points" tabIndex={0}>
           <span>Work completed</span>
           <span>Labour</span>
           <span>Materials</span>

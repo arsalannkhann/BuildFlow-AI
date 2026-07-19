@@ -9,11 +9,11 @@ import { getReport, setReportStatus, setCurrentRevision } from "@buildflow/db/qu
 import { startRun, finishRun, recordStage } from "@buildflow/db/queries/processing";
 import { audit } from "@buildflow/db/queries/audit";
 import { notifyEvent } from "@buildflow/notify/emit";
-import { LocalFsStorage } from "@buildflow/storage/local-fs";
+import { getStorage } from "@buildflow/storage/factory";
 
 export async function runProcessing(db: AppDb, ctx: TenantContext, reportId: string): Promise<void> {
   const ai = getAiRegistry();
-  const storage = new LocalFsStorage();
+  const storage = getStorage();
   const runId = await startRun(db, ctx, {
     reportId, provider: ai.extraction.meta.provider, model: ai.extraction.meta.model,
     promptVersion: ai.extraction.meta.promptVersion, schemaVersion: DPR_SCHEMA_VERSION,

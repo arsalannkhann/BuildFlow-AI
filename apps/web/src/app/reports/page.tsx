@@ -5,18 +5,21 @@ import { listReports } from "@buildflow/db/queries/reports";
 import { searchApprovedReports } from "@buildflow/db/queries/search";
 import { AppHeader } from "@/app/components/AppHeader";
 import { StatusBadge } from "@/app/components/StatusBadge";
+import { listProjects } from "@buildflow/db/queries/projects";
+import { formatProjectDate } from "@buildflow/domain/date-time";
 
-function formatReportDate(value: string): { day: string; month: string; full: string } {
-  const date = new Date(`${value}T12:00:00`);
+function formatReportDate(value: string, timeZone: string): { day: string; month: string; full: string } {
+  const date = new Date(`${value}T12:00:00.000Z`);
   return {
-    day: new Intl.DateTimeFormat("en-IN", { day: "2-digit" }).format(date),
-    month: new Intl.DateTimeFormat("en-IN", { month: "short" }).format(date).toUpperCase(),
-    full: new Intl.DateTimeFormat("en-IN", {
+    day: new Intl.DateTimeFormat("en-IN", { day: "2-digit", timeZone }).format(date),
+    month: new Intl.DateTimeFormat("en-IN", { month: "short", timeZone }).format(date),
+    full: formatProjectDate(value, {
+      timeZone,
       weekday: "short",
       day: "numeric",
       month: "long",
       year: "numeric",
-    }).format(date),
+    }),
   };
 }
 
@@ -28,18 +31,23 @@ export default async function ReportsPage({
   const db = await getDb();
   const ctx = await currentContext();
   const searchHits = q ? await searchApprovedReports(db, ctx, q) : null;
-  const reports = await listReports(db, ctx);
+  const [reports, projects] = await Promise.all([listReports(db, ctx), listProjects(db, ctx)]);
+  const projectById = new Map(projects.map((project) => [project.id, project]));
+  const activeProject = (ctx.projectId ? projectById.get(ctx.projectId) : null) ?? projects[0];
+  const activeTimezone = activeProject?.timezone ?? "Asia/Kolkata";
   const canCapture = ctx.capabilities.includes("report.create");
   const isManager = ctx.capabilities.includes("report.approve");
   const awaiting = reports.filter((report) => report.status === "AWAITING_REVIEW").length;
   const approved = reports.filter((report) => report.status === "APPROVED").length;
   const issued = reports.filter((report) => report.status === "ISSUED").length;
   const failures = reports.filter((report) => report.status === "PROCESSING_FAILED").length;
-  const today = new Intl.DateTimeFormat("en-IN", {
+  const today = formatProjectDate(new Date(), {
+    timeZone: activeTimezone,
     weekday: "long",
     day: "numeric",
     month: "long",
-  }).format(new Date());
+    year: undefined,
+  });
 
   return (
     <>
@@ -128,10 +136,10 @@ export default async function ReportsPage({
             <div className="field-hero-card__status">
               <span className="field-hero-card__date">
                 <small>TODAY</small>
-                <strong>{new Intl.DateTimeFormat("en-IN", { day: "2-digit" }).format(new Date())}</strong>
+                <strong>{new Intl.DateTimeFormat("en-IN", { day: "2-digit", timeZone: activeTimezone }).format(new Date())}</strong>
               </span>
               <div>
-                <p className="eyebrow">Sector 62 · Tower A</p>
+                <p className="eyebrow">{activeProject?.name ?? "Active project"}</p>
                 <h2>{reports[0] ? "Your latest update is on record." : "No update submitted yet."}</h2>
                 <p>
                   {reports[0]
@@ -167,7 +175,8 @@ export default async function ReportsPage({
           {reports.length > 0 ? (
             <ul className="report-list">
               {reports.map((report, index) => {
-                const date = formatReportDate(report.reportDate);
+                const project = projectById.get(report.projectId);
+                const date = formatReportDate(report.reportDate, project?.timezone ?? activeTimezone);
                 return (
                   <li key={report.id}>
                     <Link href={`/reports/${report.id}`} className="report-row">
@@ -180,7 +189,7 @@ export default async function ReportsPage({
                           <strong>Daily Progress Report</strong>
                           {index === 0 && <em>Latest</em>}
                         </span>
-                        <span>{date.full} · Sector 62, Tower A</span>
+                        <span>{date.full} · {project?.name ?? "Project"}</span>
                       </span>
                       <StatusBadge status={report.status} />
                       <span className="report-row__arrow" aria-hidden="true">→</span>

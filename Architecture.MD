@@ -1,7 +1,7 @@
 # BuildFlow AI — Technical Architecture
 
-**Status:** Architecture baseline  
-**Version:** 0.2  
+**Status:** MVP release-candidate architecture
+**Version:** 0.3
 **Last updated:** 2026-07-19  
 **Scope:** MVP through paid beta
 
@@ -12,7 +12,7 @@ BuildFlow starts as a **modular monolith with asynchronous workers**, not a coll
 This gives the team fast iteration, simple transactions, and clear boundaries without paying the operational cost of distributed services prematurely.
 
 **Implementation status (2026-07-19).** The complete-MVP build (Phases A–F, `phases.md` §0)
-is being executed on the audited DPR vertical slice. Where the implementation deviates from
+is implemented on the audited DPR vertical slice. Where the implementation deviates from
 the preferred stack in §4, the deviation and its reasoning are recorded in `docs/adr/`;
 current ADRs:
 
@@ -21,7 +21,14 @@ current ADRs:
 - ADR-0002 — One Drizzle layer over two Postgres drivers: real PostgreSQL (Docker/managed)
   as the production path, embedded PGlite as the zero-dependency test/dev default.
 - ADR-0003 — Durable background work via transactional outbox + DB-backed job runner behind
-  a queue port; Google Cloud Tasks adapter is the production implementation.
+  a queue port. It is the MVP runner; Cloud Tasks is an extraction option after measured
+  throughput or isolation needs justify another managed component.
+
+The release candidate uses Next.js route handlers/server actions rather than NestJS,
+repository-native CSS rather than Tailwind/shadcn, the portable credential/session adapter
+rather than Supabase Auth, and allow-listed JSON logging rather than a full OpenTelemetry
+exporter. PostgreSQL, Supabase Storage, Cloud Run/OpenTofu and provider adapters preserve the
+target deployment path without making unimplemented components sound operational.
 
 ## 2. Architecture principles
 
@@ -124,23 +131,23 @@ buildflow/
 ├── apps/
 │   ├── web/                 # Next.js manager/admin experience
 │   ├── mobile/              # Expo Android/iOS field app
-│   ├── api/                 # NestJS modular monolith
-│   └── ai-worker/           # Python processing worker
+│   └── worker/              # TypeScript durable-job worker
 ├── packages/
-│   ├── contracts/           # Zod schemas, DTOs, event schemas
+│   ├── ai/                  # AI/OCR provider ports and deterministic mocks
+│   ├── auth/                # Authentication port and credential/session adapter
+│   ├── contracts/           # Zod contracts and OpenAPI 3.1 document
 │   ├── domain/              # Framework-free domain types and policies
 │   ├── db/                  # Drizzle schema, SQL migrations, seeds
-│   ├── ui/                  # Shared web design tokens/primitives
-│   ├── config/              # TypeScript, lint, formatting presets
+│   ├── jobs/                # Transactional queue, leasing, retry and dead letters
+│   ├── lifecycle/           # Export, retention and deletion
+│   ├── notify/              # Notification ports and delivery registry
 │   ├── observability/       # Logging/tracing conventions
-│   └── testkit/             # Factories and integration helpers
+│   ├── pdf/                 # Issued DPR/compliance PDF rendering
+│   ├── pipeline/            # Processing stages and job handlers
+│   └── storage/             # Local and Supabase object-storage adapters
 ├── prompts/
 │   ├── dpr-extraction/      # Versioned prompt + schema + eval metadata
 │   └── dpr-summary/
-├── evals/
-│   ├── fixtures/            # De-identified, consented examples only
-│   ├── graders/
-│   └── reports/
 ├── infrastructure/
 │   ├── environments/
 │   └── modules/
@@ -152,7 +159,7 @@ buildflow/
 ├── Architecture.MD
 ├── rules.md
 ├── phases.md
-├── deisgn.md
+├── design.md
 └── memory.md
 ```
 
@@ -377,7 +384,10 @@ PostgreSQL remains the source of truth; any graph is a rebuildable projection.
 
 ## 15. Events and durable work
 
-Use a transactional outbox table written in the same transaction as the domain change. A dispatcher sends commands to Cloud Tasks and publishes non-critical fan-out events when needed.
+Use the `job` table as a transactional queue written in the same transaction as the domain
+change. The worker leases rows with bounded retries/backoff, parks terminal failures and
+emits allow-listed health signals. A future Cloud Tasks dispatcher may consume the same
+versioned commands without changing domain transactions.
 
 Example events:
 
@@ -416,7 +426,11 @@ Event schemas are immutable. Breaking changes create a new version.
 | Audit | approvals, issuance, access | Append-only with defined retention. |
 | Telemetry | timing, error code, usage | No customer narrative or raw media. |
 
-Deletion must cascade to derived data and vector entries while preserving only legally required, explicitly documented audit metadata.
+Deletion cascades to derived data and vector entries while preserving only a signed,
+content-free deletion receipt. Organization export produces an audited ZIP of tenant CSV
+registers plus attachment manifest. Retention is configured per organization and the daily
+worker removes expired evidence and inherited AI derivatives together. Account deletion
+requires a distinct second owner and a seven-day grace period.
 
 ## 18. Observability
 
@@ -431,7 +445,8 @@ Every request and job carries:
 - provider request ID
 - prompt/schema/model version
 
-Never log transcripts, report text, filenames, signed URLs, JWTs, phone numbers, or model prompts containing customer data.
+Never log transcripts, report text, filenames, signed URLs, JWTs, phone numbers, or model prompts containing customer data. The MVP enforces this with an allow-listed JSON logger,
+AsyncLocalStorage trace context, structured request/job events and a provider/job health page.
 
 ### Service-level indicators
 
@@ -480,11 +495,12 @@ Never log transcripts, report text, filenames, signed URLs, JWTs, phone numbers,
 
 Deployment flow:
 
-1. Lint, type-check, unit tests, and secret scan.
+1. Secret scan, type-check, unit/integration tests and contract checks.
 2. Build pinned container images and produce an SBOM.
 3. Run database migration checks against an ephemeral database.
 4. Run integration, contract, and critical AI eval gates.
-5. Deploy to staging and run end-to-end smoke tests.
+5. Deploy to staging and run accessibility, navigation, registration/onboarding,
+   capture-to-issue and managed-storage smoke tests.
 6. Apply reviewed infrastructure and migration plan.
 7. Deploy production gradually with automatic rollback signals.
 

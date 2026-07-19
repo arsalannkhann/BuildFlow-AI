@@ -10,8 +10,9 @@ Nothing here is applied automatically — `tofu plan` output must be reviewed be
   workload-identity service account, secret mounts, autoscaling bounds.
 - `modules/cloud-tasks-queue` — durable dispatch queue for the transactional outbox
   (ADR-0003 Cloud Tasks adapter; the DB-backed runner remains the fallback).
-- `modules/storage-bucket` — evidence bucket: uniform access, CMEK-ready, lifecycle rules
-  aligned with retention policy, no public access.
+- `modules/storage-bucket` — optional GCS backup/archive bucket with uniform access and no
+  public access. The application evidence adapter uses the private Supabase bucket named by
+  `supabase_storage_bucket`; keep both in the approved India region.
 - `modules/secrets` — Secret Manager entries (names only; values are set out-of-band).
 - `environments/staging`, `environments/production` — composition roots. Production pins an
   approved India region (`asia-south1` / Mumbai); the managed Postgres (Supabase) project is

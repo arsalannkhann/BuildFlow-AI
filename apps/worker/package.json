@@ -12,6 +12,8 @@
     "@buildflow/db": "workspace:*",
     "@buildflow/domain": "workspace:*",
     "@buildflow/jobs": "workspace:*",
+    "@buildflow/lifecycle": "workspace:*",
+    "@buildflow/observability": "workspace:*",
     "@buildflow/pipeline": "workspace:*"
   },
   "devDependencies": {

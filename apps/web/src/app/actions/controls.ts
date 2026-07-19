@@ -2,7 +2,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { getDb } from "@buildflow/db/client";
-import { LocalFsStorage } from "@buildflow/storage/local-fs";
+import { getStorage } from "@buildflow/storage/factory";
 import { currentContext } from "@/app/session";
 import {
   addScheduleDependency, createRfi, createScheduleItem, linkApprovedReport,
@@ -136,7 +136,7 @@ export async function respondToRfiAction(formData: FormData): Promise<void> {
   const rfiId = str(formData, "rfiId");
   const { db, ctx } = await projectCtx(projectId);
   const upload = formData.get("file") as File | null;
-  await respondToRfi(db, ctx, new LocalFsStorage(), {
+  await respondToRfi(db, ctx, getStorage(), {
     rfiId,
     body: str(formData, "body"),
     markAnswered: formData.get("markAnswered") === "on",
@@ -174,7 +174,7 @@ export async function uploadDocumentRevisionAction(formData: FormData): Promise<
   const documentId = str(formData, "documentId");
   const { db, ctx } = await projectCtx(projectId);
   const upload = formData.get("file") as File | null;
-  await uploadDocumentRevision(db, ctx, new LocalFsStorage(), {
+  await uploadDocumentRevision(db, ctx, getStorage(), {
     documentId,
     revisionLabel: str(formData, "revisionLabel"),
     notes: opt(formData, "notes") ?? undefined,

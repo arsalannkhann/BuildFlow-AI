@@ -47,11 +47,32 @@ work from ids, statuses, and audit events (rules.md §16).
 
 ## Backup / restore (local + managed)
 
-- Managed Postgres (Supabase/prod): use provider PITR; restore to a NEW instance, verify
-  counts + latest `audit_event` continuity, then repoint `DATABASE_URL`.
-- Storage: objects are immutable-by-key; restore = copy prefix back; attachment checksums
-  verify integrity after restore.
-- Drill (Phase F gate): restore latest backup to staging, run the e2e suite against it.
+### PGlite development data
+
+1. Stop the web process so the embedded database is quiescent.
+2. Copy the complete `PGLITE_DATA_DIR` and `STORAGE_DIR` directories to a timestamped backup.
+3. Restore into new directories, point the two environment variables at them, and run
+   `pnpm dev`. Never overwrite the only copy during a drill.
+4. Verify `select count(*) from organization`, open an issued PDF, then run `pnpm test:e2e`.
+
+### Managed PostgreSQL / Supabase production
+
+1. Prefer provider point-in-time recovery within the contracted recovery window. Restore to
+   a **new** database/project; never restore over the incident source.
+2. For a logical backup drill use `pg_dump --format=custom --no-owner "$DATABASE_URL"` and
+   `pg_restore --no-owner --exit-on-error --dbname "$RESTORE_DATABASE_URL" backup.dump`.
+3. Set the restored runtime connection to the non-owner `buildflow_app` role. Verify the
+   latest migration journal, FORCE RLS policies, organization/project/report counts, latest
+   append-only `audit_event`, and zero cross-tenant probe results.
+4. Restore private storage to an isolated bucket/prefix. Sample every object class and compare
+   stored SHA-256 checksums; keep public access prevention enabled.
+5. Point a staging web+worker pair to the restored database/bucket and run `pnpm typecheck`,
+   `pnpm test`, `pnpm test:e2e`, and the 20 acceptance scenarios. Destroy the drill copy under
+   the documented retention policy.
+
+**Targets:** database RPO ≤ provider backup interval (PITR target ≤ 15 min), RTO ≤ 4 h for
+pilot production. Run a restore drill before launch and quarterly; record date, backup age,
+duration, verifier and exceptions in the release evidence.
 
 ## Post-incident
 

@@ -11,6 +11,7 @@ import { AutoRefresh } from "@/app/components/AutoRefresh";
 import { listClientLinks } from "@buildflow/db/queries/client-links";
 import { listReportLinks, listScheduleItems } from "@buildflow/db/queries/controls";
 import { linkReportAction, raiseBlockerAction } from "@/app/actions/controls";
+import { getProject } from "@buildflow/db/queries/projects";
 
 export default async function ReportPage({ params, searchParams }: {
   params: Promise<{ id: string }>;
@@ -21,6 +22,7 @@ export default async function ReportPage({ params, searchParams }: {
   const db = await getDb();
   const ctx = await currentContext();
   const report = await getReport(db, ctx, id);
+  const project = await getProject(db, ctx, report.projectId);
   const rev = await latestRevision(db, ctx, id);
   const atts = await listAttachments(db, ctx, id);
   const rows = rev ? buildFieldRows(rev.structuredData as DprStructuredData) : [];
@@ -52,6 +54,8 @@ export default async function ReportPage({ params, searchParams }: {
       <ReviewClient
         reportId={id}
         reportDate={report.reportDate}
+        projectName={project.name}
+        projectTimezone={project.timezone}
         status={report.status}
         rows={rows}
         transcript={transcript}

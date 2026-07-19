@@ -2,7 +2,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { getDb } from "@buildflow/db/client";
-import { LocalFsStorage } from "@buildflow/storage/local-fs";
+import { getStorage } from "@buildflow/storage/factory";
 import { parseINRToPaise } from "@buildflow/domain/money";
 import { currentContext } from "@/app/session";
 import { createCostCode, importBudgetCsv } from "@/core/budget-core";
@@ -44,7 +44,7 @@ export async function createInvoiceAction(formData: FormData): Promise<void> {
   const projectId = str(formData, "projectId");
   const { db, ctx } = await projectCtx(projectId);
   const upload = formData.get("photo") as File | null;
-  const invoiceId = await createInvoice(db, new LocalFsStorage(), ctx, {
+  const invoiceId = await createInvoice(db, getStorage(), ctx, {
     projectId,
     supplierId: opt(formData, "supplierId"),
     invoiceNumber: opt(formData, "invoiceNumber"),

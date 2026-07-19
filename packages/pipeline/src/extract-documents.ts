@@ -6,7 +6,7 @@ import {
   addReceiptLine, getReceipt, listReceiptLines, updateReceipt,
 } from "@buildflow/db/queries/materials";
 import { audit } from "@buildflow/db/queries/audit";
-import { LocalFsStorage } from "@buildflow/storage/local-fs";
+import { getStorage } from "@buildflow/storage/factory";
 
 // Challan OCR: reads the uploaded photo and lands DRAFT receipt lines for human review.
 // This job NEVER touches stock — posting is a separate, human, capability-gated action.
@@ -31,7 +31,7 @@ export async function runChallanExtraction(db: AppDb, ctx: TenantContext, receip
   }
 
   try {
-    const imageBytes = await new LocalFsStorage().get(receipt.objectKey);
+    const imageBytes = await getStorage().get(receipt.objectKey);
     const raw = await ai.documents.extractChallan({ imageBytes, contentType: receipt.contentType });
     if (raw === null) {
       await updateReceipt(db, ctx, receiptId, { ...meta, ocrStatus: "unsupported" });

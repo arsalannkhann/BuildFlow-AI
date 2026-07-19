@@ -18,33 +18,34 @@ record; evidence objects and derived AI artifacts inherit the source record's po
 ## Export (organization owner request)
 
 1. Verify the requester holds `org.export` (organization owners do).
-2. Run the export against a read replica or off-hours:
-   - relational: `pg_dump --schema=public --no-owner` filtered by `organization_id`
-     (per-table `\copy (select … where organization_id = $ORG) to csv` for portability), or
-     the in-app export (Phase F admin UI) which produces CSV/JSON per module.
-   - evidence: copy the `org/<orgId>/` prefix from the storage root.
-3. Record an `audit_event` (`org.exported`) with the request reference.
-4. Deliver via an expiring, access-controlled channel. Never email raw archives.
+2. Use **Organization → Prepare new export**. It queues `organization.export` and produces a
+   ZIP containing organization metadata, one CSV per tenant table, and an attachment/object
+   manifest. It intentionally does not duplicate evidence binaries into the archive.
+3. The request and completion write `organization.export_requested` and
+   `organization.export_completed`. Download creates a five-minute signed URL in Supabase
+   (or an authenticated no-store response in local mode) and is audited.
+4. For a contractually required binary evidence handoff, copy the `org/<orgId>/` prefix to a
+   separate private bucket after authorization. Never email raw archives.
 
 ## Deletion (offboarding or DPDP-style request)
 
 Deletion is asynchronous and staged; never run ad-hoc `DELETE` statements on production.
 
-1. Confirm authorization in writing from an organization owner; record the request id.
-2. Freeze access: deactivate users (`user.is_active = false`), revoke invitations and
-   client links (`update client_link set revoked_at = now() where organization_id = …`).
-3. Snapshot a final export if contractually required (see above) BEFORE destruction.
-4. Destroy in dependency order inside a transaction per batch:
-   evidence-derived rows → revisions/decisions → reports → controls/commercial rows →
-   memberships/credentials/sessions/users → reference data → organization row last.
-5. Evidence objects: delete the `org/<orgId>/` prefix after the DB pass succeeds.
-6. Preserve ONLY the legally required audit skeleton: `audit_event` rows may be retained
-   with `metadata` nulled if policy demands traceability without content.
-7. Write the completion `audit_event` in the operator organization and close the ticket.
+1. One organization owner enters the exact organization name to request deletion. A different
+   organization owner must approve it; the database rejects same-person approval.
+2. Approval queues `organization.delete` for seven days after the request. Either owner can
+   cancel while it is queued. Snapshot a final export before approval when contractually needed.
+3. At execution the worker re-checks both distinct actors and the elapsed grace period, deletes
+   every object under `org/<orgId>/`, then destroys credentials, sessions, tenant tables and the
+   organization row in one transaction.
+4. The same transaction preserves only a content-free `deletion_receipt`: one-way keyed hashes
+   of organization/requester/approver IDs, aggregate row/object counts and completion time.
+5. A production worker refuses to generate the receipt without
+   `DELETION_RECEIPT_HMAC_KEY`. Never run ad-hoc production deletes.
 
 ## Verification
 
-- `select count(*) from <each tenant table> where organization_id = $ORG` → 0 everywhere
-  except retained audit rows.
+- `select count(*) from <each tenant table> where organization_id = $ORG` → 0 everywhere.
 - Storage prefix listing is empty.
 - A cross-tenant probe with a stale object id returns 404 (fail-closed check).
+- One `deletion_receipt` exists and contains no raw identifiers or customer content.

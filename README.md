@@ -1,95 +1,105 @@
 # BuildFlow AI
 
-Android-first, multi-tenant construction operations platform for Indian contractors,
-developers and EPC firms. Field capture (voice, photos, documents) → AI extraction → human
-review → approved project record → dashboards, materials, costs, compliance evidence and
-grounded answers.
+BuildFlow is an Android-first, multi-tenant construction operations system for Indian
+contractors, developers and EPC firms. Field evidence (voice, photos and documents) becomes
+an AI-assisted draft, then a human-approved project record used by reports, controls,
+materials, costs, measurement, compliance and grounded portfolio answers.
 
-**Status (2026-07-19):** the audited DPR vertical slice (`docs/GAP-ANALYSIS.md`) is being
-expanded into the complete MVP — Phases A–F in [phases.md](phases.md) §0. Phase A
-(monorepo foundation, real auth, RLS, durable jobs, dual-driver Postgres) is landing now.
+**Engineering status (2026-07-19):** Phases A–F of the complete MVP are implemented. The
+local release gate passes 15 package typechecks, 162 unit/integration tests, a production
+build and three critical browser journeys. The Docker/managed-Postgres migration check and
+live Supabase signed-URL smoke remain environment-specific pre-deployment gates; see
+`docs/RELEASE-EVIDENCE.md`.
 
 ## Repository layout
 
-```
+```text
 apps/
-  web/        Next.js 15 management app + server actions (+ /v1 API in Phase B)
-  worker/     durable job runner (requires real Postgres; see ADR-0003)
+  web/            Next.js 15 web OS, server actions and /api/v1 REST API
+  mobile/         Expo field capture app with durable offline sync
+  worker/         database-backed asynchronous worker
 packages/
-  domain/     framework-free: DPR schema, report state machine, tenancy/roles, ids, password hashing
-  db/         Drizzle schema, SQL migrations (incl. RLS), tenant-scoped queries, seed
-  auth/       AuthPort: dev credential adapter (scrypt + server-side sessions); Supabase adapter planned
-  jobs/       transactional outbox + DB-backed job queue (lease/retry/backoff/dead-letter)
-  ai/         Transcription/Extraction/Summary ports; deterministic mock (default) + OpenAI
-  storage/    StoragePort; local-FS implementation (signed-URL adapter planned)
-  pipeline/   DPR processing stages + job registry
-  pdf/        issued-DPR HTML template + Playwright renderer
-docs/         gap analysis, ADRs, superpowers specs/plans
-prompts/      versioned prompt artifacts
+  domain/         framework-free policies, calculations, schemas and formatting
+  db/             Drizzle schema, migrations, RLS, tenant queries and seeds
+  contracts/      API contracts and OpenAPI 3.1 document
+  auth/           portable authentication port and credential/session adapter
+  jobs/           transactional queue, leases, retries and dead letters
+  ai/             transcription, extraction and summary provider ports
+  storage/        local-FS and Supabase Storage adapters
+  pipeline/       DPR/document processing stages and job registry
+  lifecycle/      organization export, retention and deletion workflows
+  observability/  allow-listed structured logs and trace context
+  notify/         in-app, email and WhatsApp notification adapters
+  pdf/            issued DPR and compliance PDF rendering
+infrastructure/   OpenTofu staging/production definitions
+docs/             API guide, SLOs, ADRs, runbooks, threat models and release evidence
 ```
 
 ## Prerequisites
 
-- Node 20
-- pnpm 9 via Corepack (`corepack enable pnpm`). pnpm 11 crashes on Node 20; stay on 9.
-- Docker (optional — only for the real-PostgreSQL path)
+- Node.js 22 or newer
+- pnpm 9 through Corepack (`corepack enable pnpm`)
+- Chromium for Playwright (`pnpm exec playwright install chromium`)
+- Docker only for the real-PostgreSQL release check
 
-## Run (zero-dependency mode)
+## Run locally
 
-```
+```bash
 pnpm install
-pnpm exec playwright install chromium
-cp .env.example .env.local   # defaults: mock AI, embedded PGlite, local storage
+cp .env.example .env.local
 pnpm dev
 ```
 
-Open http://localhost:3000 → sign in (demo quick-login cards, or email/password —
-`engineer@demo.buildflow.local` / `manager@demo.buildflow.local`, password
-`buildflow-demo`) → **Record update** → submit → switch to the manager → review → approve →
-issue PDF → download.
+Open <http://localhost:3000>. Local mode uses synthetic demo accounts, deterministic mock AI,
+embedded PGlite and local private storage. Do not place customer data in a local environment.
+Set `SIGNUPS_ENABLED=1` only when self-service organization registration is intended; customer
+environments keep demo seeding and one-click demo login disabled.
 
-## Run against real PostgreSQL (production path, ADR-0002)
+Seed the richer two-project demonstration dataset when needed:
 
+```bash
+pnpm seed:demo
 ```
+
+## Run with PostgreSQL and a worker
+
+```bash
 docker compose up -d db
 DATABASE_URL=postgresql://buildflow:buildflow@localhost:5432/buildflow pnpm dev
-# optional separate worker (moves AI processing off the request path):
-DATABASE_URL=postgresql://buildflow:buildflow@localhost:5432/buildflow JOBS_MODE=worker pnpm --filter @buildflow/worker dev
+DATABASE_URL=postgresql://buildflow:buildflow@localhost:5432/buildflow \
+  JOBS_MODE=worker pnpm --filter @buildflow/worker dev
 ```
 
-Migrations (including Row-Level-Security policies) apply automatically on boot. A Supabase
-Postgres URL works the same way — set `DATABASE_URL` in `.env.local`.
+The same reviewed migrations serve embedded PGlite, Docker PostgreSQL and managed PostgreSQL.
+Production evidence storage uses the Supabase adapter when `SUPABASE_URL`,
+`SUPABASE_SERVICE_ROLE_KEY` and `SUPABASE_STORAGE_BUCKET` are configured together. Otherwise
+the application intentionally stays on local storage.
 
-## Test and verify
+## Verify a release
 
-```
-pnpm typecheck    # tsc across all workspace packages (turbo)
-pnpm test         # Vitest unit + integration (hermetic, PGlite-backed) incl. RLS + cross-tenant suites
-pnpm test:e2e     # Playwright: capture → process → review → approve → issue → download
-pnpm build        # production build
-pnpm --filter @buildflow/db verify:real-pg          # with DATABASE_URL: migrations+seed+RLS on real PG
-```
+```bash
+pnpm verify:release
 
-CI (`.github/workflows/ci.yml`) runs typecheck/test/build, the e2e flow, and the
-real-PostgreSQL verification against a service container.
-
-Note on `pnpm test:e2e` on macOS: headless Chrome's microphone is OS-gated in
-non-interactive runs, so the e2e injects a synthesized audio stream while still exercising
-the real MediaRecorder → upload → pipeline path. Linux CI does not need this.
-
-## AI providers
-
-Mock provider (deterministic, offline) is the default. For OpenAI set in `.env.local`:
-
-```
-AI_PROVIDER=openai
-OPENAI_API_KEY=sk-...
+# Requires a disposable real PostgreSQL database:
+DATABASE_URL=postgresql://buildflow:buildflow@localhost:5432/buildflow \
+  pnpm --filter @buildflow/db verify:real-pg
 ```
 
-Unknown `AI_PROVIDER` values fail loudly. Provider keys live server-side only.
+`verify:release` runs the secret scan, all typechecks, all Vitest suites, the production
+build and Playwright journeys for accessibility/reflow, capture-to-issued-PDF and navigation.
+CI uses Node 22 and also provisions PostgreSQL for the migration/RLS gate.
 
-## Architecture
+## Providers and safety
 
-See [Architecture.MD](Architecture.MD), the ADRs in [docs/adr/](docs/adr), mandatory rules
-in [rules.md](rules.md), UX in [design.md](design.md), the working plan in
-[phases.md](phases.md) §0, and durable context in [memory.md](memory.md).
+Mock AI is the default. Set `AI_PROVIDER=openai` and server-side OpenAI configuration to use
+the live adapter. Provider keys and Supabase service-role keys must never reach the browser.
+Unknown provider values fail closed.
+
+AI output is always a draft until an accountable user approves it. BuildFlow does not make
+autonomous payments, procurement decisions, progress claims or government submissions.
+
+## Project documents
+
+Start with [PRD.md](PRD.md), [Architecture.MD](Architecture.MD), [rules.md](rules.md),
+[phases.md](phases.md), [design.md](design.md) and [memory.md](memory.md). Operational details
+are in [docs/API.md](docs/API.md), [docs/SLO.md](docs/SLO.md) and the runbooks under `docs/`.
