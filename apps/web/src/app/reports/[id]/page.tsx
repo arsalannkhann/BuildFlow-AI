@@ -9,6 +9,8 @@ import type { DprStructuredData } from "@buildflow/domain/dpr/schema";
 import { AppHeader } from "@/app/components/AppHeader";
 import { AutoRefresh } from "@/app/components/AutoRefresh";
 import { listClientLinks } from "@buildflow/db/queries/client-links";
+import { listReportLinks, listScheduleItems } from "@buildflow/db/queries/controls";
+import { linkReportAction, raiseBlockerAction } from "@/app/actions/controls";
 
 export default async function ReportPage({ params, searchParams }: {
   params: Promise<{ id: string }>;
@@ -28,6 +30,16 @@ export default async function ReportPage({ params, searchParams }: {
   const canReview = ctx.capabilities.includes("report.review");
   const clientLinks = (report.status === "ISSUED" || report.status === "SUPERSEDED")
     ? await listClientLinks(db, ctx, id) : [];
+  const isApproved = ["APPROVED", "ISSUED", "SUPERSEDED"].includes(report.status);
+  const projectCtx = { ...ctx, projectId: report.projectId };
+  const canLinkSchedule = isApproved && ctx.capabilities.includes("schedule.manage");
+  const scheduleItems = canLinkSchedule
+    ? await listScheduleItems(db, projectCtx, report.projectId) : [];
+  const scheduleLinks = canLinkSchedule
+    ? await listReportLinks(db, projectCtx, { reportId: id }) : [];
+  const canTrackBlockers = isApproved && ctx.capabilities.includes("blocker.manage");
+  const extractedBlockers = canTrackBlockers && rev
+    ? (rev.structuredData as DprStructuredData).blockers : [];
 
   const processing = report.status === "UPLOADED" || report.status === "PROCESSING";
   return (
@@ -52,6 +64,63 @@ export default async function ReportPage({ params, searchParams }: {
           .filter((l) => !l.revokedAt && l.expiresAt.getTime() > Date.now())
           .map((l) => ({ id: l.id, expiresAt: l.expiresAt.toISOString() }))}
       />
+      {canLinkSchedule ? (
+        <section className="page-shell surface-card admin-section" aria-labelledby="rep-schedule">
+          <h2 id="rep-schedule">Schedule links</h2>
+          <p className="page-lead">
+            Link this approved report to the schedule activities it evidences. Linking never
+            changes a progress percentage.
+          </p>
+          {scheduleLinks.length > 0 ? (
+            <ul>
+              {scheduleLinks.map((l) => (
+                <li key={l.id}>
+                  {scheduleItems.find((s) => s.id === l.scheduleItemId)?.name ?? l.scheduleItemId}
+                  {l.note ? ` — ${l.note}` : ""}
+                </li>
+              ))}
+            </ul>
+          ) : <p className="admin-empty">Not linked to any schedule activity yet.</p>}
+          {scheduleItems.length > 0 ? (
+            <form action={linkReportAction} className="admin-form admin-form--inline">
+              <input type="hidden" name="projectId" value={report.projectId} />
+              <input type="hidden" name="reportId" value={id} />
+              <label>Activity
+                <select name="scheduleItemId" required>
+                  {scheduleItems.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </label>
+              <label>Note <input name="note" placeholder="What does this report evidence?" /></label>
+              <button className="secondary-button" type="submit">Link report</button>
+            </form>
+          ) : (
+            <p className="admin-empty">No schedule items exist yet — add them on the Schedule page.</p>
+          )}
+        </section>
+      ) : null}
+      {canTrackBlockers && extractedBlockers.length > 0 ? (
+        <section className="page-shell surface-card admin-section" aria-labelledby="rep-blockers">
+          <h2 id="rep-blockers">Track extracted blockers</h2>
+          <p className="page-lead">Promote blockers stated in this approved report into tracked project blockers.</p>
+          <ul>
+            {extractedBlockers.map((b, i) => (
+              <li key={i}>
+                {b.description}
+                <form action={raiseBlockerAction} className="admin-inline-form">
+                  <input type="hidden" name="projectId" value={report.projectId} />
+                  <input type="hidden" name="reportId" value={id} />
+                  <input type="hidden" name="title" value={b.description.slice(0, 200)} />
+                  <input type="hidden" name="description"
+                    value={[b.cause ? `Cause: ${b.cause}` : "", b.owner ? `Owner: ${b.owner}` : ""].filter(Boolean).join(" · ")} />
+                  <input type="hidden" name="ownerName" value={b.owner ?? ""} />
+                  <input type="hidden" name="returnTo" value={`/reports/${id}`} />
+                  <button className="secondary-button" type="submit">Track as blocker</button>
+                </form>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
     </>
   );
 }

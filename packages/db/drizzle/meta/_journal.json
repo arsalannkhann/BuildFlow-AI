@@ -43,6 +43,13 @@
       "when": 1784413188595,
       "tag": "0005_report_search",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1784459421912,
+      "tag": "0006_brown_hitman",
+      "breakpoints": true
     }
   ]
 }

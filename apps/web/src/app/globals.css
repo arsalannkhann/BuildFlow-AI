@@ -2955,3 +2955,66 @@ textarea:focus-visible {
 .reports-search { margin: 16px 0; }
 .reports-search__form { display: flex; gap: 8px; max-width: 560px; }
 .reports-search__form input[type="search"] { flex: 1; min-height: 44px; padding: 8px 14px; border: 1px solid var(--neutral-200, #e5e7eb); border-radius: 10px; font-size: 16px; }
+
+/* Project controls (Phase C) */
+.project-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 16px 0 24px;
+  border-bottom: 1px solid var(--neutral-200, #e5e7eb);
+}
+.project-nav__tab {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 8px 16px;
+  border-radius: 10px 10px 0 0;
+  color: var(--neutral-700, #374151);
+  text-decoration: none;
+  font-weight: 600;
+}
+.project-nav__tab--active {
+  color: var(--brand-700, #1f4e6d);
+  box-shadow: inset 0 -3px 0 var(--brand-700, #1f4e6d);
+}
+.project-nav__tab:focus-visible {
+  outline: 3px solid var(--brand-100, #dceaf2);
+  outline-offset: -3px;
+}
+.overview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+}
+.delay-indicator {
+  border-left: 4px solid var(--warning-700, #996a00);
+  padding: 8px 12px;
+  margin: 8px 0;
+  background: var(--warning-100, #fff2c6);
+  border-radius: 0 8px 8px 0;
+}
+.delay-indicator strong { display: block; }
+.delay-indicator p { margin: 4px 0 0; font-size: 14px; }
+.report-days {
+  display: flex;
+  gap: 6px;
+  list-style: none;
+  padding: 0;
+}
+.report-days li {
+  flex: 1;
+  text-align: center;
+  padding: 6px 2px;
+  border-radius: 8px;
+  font-size: 12px;
+  border: 1px solid var(--neutral-200, #e5e7eb);
+}
+.report-days li.day--approved { background: var(--success-100, #ddf3e8); border-color: var(--success-700, #16794b); }
+.report-days li.day--submitted { background: var(--warning-100, #fff2c6); }
+.report-days li.day--missing { background: var(--danger-100, #fee4e2); }
+.severity-chip { font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
+.severity-critical { background: var(--danger-100, #fee4e2); color: var(--danger-700, #b42318); }
+.severity-high { background: var(--warning-100, #fff2c6); color: var(--warning-700, #996a00); }
+.severity-medium { background: var(--brand-100, #dceaf2); color: var(--brand-700, #1f4e6d); }
+.severity-low { background: var(--neutral-50, #f9fafb); color: var(--neutral-700, #374151); }

@@ -155,6 +155,25 @@ The source roadmap discusses RERA, DPCC Dust Portal, GRAP, Measurement Books, Ta
 
 ## 14. Decision log
 
+### 2026-07-19 — Phase C landed: project controls
+
+**What:** schedule items/milestones with baseline vs current dates and manual progress
+(0–100, human-entered only); append-only `progress_update` history where cited evidence must
+be an APPROVED report (drafts rejected); dependencies with same-project validation;
+first-class blockers (severity/owner/due/resolution-note lifecycle, DPR back-links,
+promote-from-extracted-blocker on approved reports); RFIs with per-project sequence numbers
++ append-only response threads with file uploads; drawing/document register with append-only
+revisions and moving current pointer (old revisions auto-superseded); DPR↔schedule links
+(evidence only — linking never moves a percentage); project overview with 7-day reporting
+completeness, blocker rollup, 30-day milestones, and **explainable delay indicators** built
+only from stored records (current-end overrun, baseline slip, open blockers, last approved
+evidence — each named in the explanation).
+**Migration:** 0006 (9 tables, FORCE RLS on all, rfi number + dependency + link uniques).
+**UI:** ProjectNav tabs (Overview/Schedule/Blockers/RFIs/Documents/Settings) on new
+`/projects/[id]` pages; report page gains schedule-link + blocker-tracking sections.
+**Deferred:** schedule CSV import (Phase F polish), Gantt visualization (post-MVP),
+RFI email notifications (Phase E).
+
 ### 2026-07-19 — Phase B (web + API) landed: trusted project record
 
 **What:** `/v1` mobile sync API (idempotent manifest → checksum-verified uploads →

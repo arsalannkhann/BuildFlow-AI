@@ -134,6 +134,149 @@ export const clientLinks = pgTable("client_link", {
   createdAt: ts(),
 });
 
+
+// --- Phase C: project controls ---
+
+// Schedule items and milestones. Progress is MANUAL (rules.md §11: no invented
+// percentages); every change lands in progress_update with optional evidence links.
+export const scheduleItems = pgTable("schedule_item", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull(),
+  projectId: text("project_id").notNull(),
+  activityId: text("activity_id"),
+  name: text("name").notNull(),
+  isMilestone: boolean("is_milestone").notNull().default(false),
+  baselineStart: text("baseline_start"), // ISO dates; project tz applies for display
+  baselineEnd: text("baseline_end"),
+  currentStart: text("current_start"),
+  currentEnd: text("current_end"),
+  progressPercent: integer("progress_percent").notNull().default(0),
+  status: text("status").notNull().default("planned"), // planned | in_progress | complete | on_hold
+  ownerName: text("owner_name"),
+  ownerUserId: text("owner_user_id"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: ts(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const scheduleDependencies = pgTable("schedule_dependency", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull(),
+  projectId: text("project_id").notNull(),
+  predecessorId: text("predecessor_id").notNull(),
+  successorId: text("successor_id").notNull(),
+  createdAt: ts(),
+});
+
+// Append-only progress history with evidence (approved DPR and/or photo attachment).
+export const progressUpdates = pgTable("progress_update", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull(),
+  projectId: text("project_id").notNull(),
+  scheduleItemId: text("schedule_item_id").notNull(),
+  percent: integer("percent").notNull(),
+  note: text("note"),
+  reportId: text("report_id"),
+  attachmentId: text("attachment_id"),
+  createdBy: text("created_by").notNull(),
+  createdAt: ts(),
+});
+
+// First-class blockers (DPR-extracted blockers link back via report_id).
+export const blockers = pgTable("blocker", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull(),
+  projectId: text("project_id").notNull(),
+  title: text("title").notNull(),
+  description: text("description"),
+  severity: text("severity").notNull().default("medium"), // low | medium | high | critical
+  status: text("status").notNull().default("open"), // open | in_progress | resolved
+  ownerName: text("owner_name"),
+  ownerUserId: text("owner_user_id"),
+  dueDate: text("due_date"),
+  reportId: text("report_id"),
+  scheduleItemId: text("schedule_item_id"),
+  resolutionNote: text("resolution_note"),
+  resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+  createdBy: text("created_by").notNull(),
+  createdAt: ts(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const rfis = pgTable("rfi", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull(),
+  projectId: text("project_id").notNull(),
+  number: integer("number").notNull(), // per-project sequence, unique index below
+  subject: text("subject").notNull(),
+  question: text("question").notNull(),
+  status: text("status").notNull().default("open"), // open | answered | closed
+  assigneeName: text("assignee_name"),
+  assigneeUserId: text("assignee_user_id"),
+  dueDate: text("due_date"),
+  createdBy: text("created_by").notNull(),
+  createdAt: ts(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+// Append-only RFI thread; optional uploaded file stored directly (not report-scoped).
+export const rfiResponses = pgTable("rfi_response", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull(),
+  rfiId: text("rfi_id").notNull(),
+  body: text("body").notNull(),
+  objectKey: text("object_key"),
+  fileName: text("file_name"),
+  contentType: text("content_type"),
+  byteSize: bigint("byte_size", { mode: "number" }),
+  checksum: text("checksum"),
+  createdBy: text("created_by").notNull(),
+  createdAt: ts(),
+});
+
+// Drawing and document register; revisions are append-only, current pointer moves forward.
+export const documents = pgTable("document", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull(),
+  projectId: text("project_id").notNull(),
+  title: text("title").notNull(),
+  docNumber: text("doc_number"),
+  discipline: text("discipline"),
+  category: text("category").notNull().default("drawing"), // drawing | specification | contract | other
+  currentRevisionId: text("current_revision_id"),
+  createdBy: text("created_by").notNull(),
+  createdAt: ts(),
+});
+
+export const documentRevisions = pgTable("document_revision", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull(),
+  documentId: text("document_id").notNull(),
+  revisionLabel: text("revision_label").notNull(),
+  notes: text("notes"),
+  status: text("status").notNull().default("issued"), // issued | superseded
+  objectKey: text("object_key"),
+  fileName: text("file_name"),
+  contentType: text("content_type"),
+  byteSize: bigint("byte_size", { mode: "number" }),
+  checksum: text("checksum"),
+  createdBy: text("created_by").notNull(),
+  createdAt: ts(),
+});
+
+// Daily link between an approved DPR's work items and schedule activities.
+export const reportActivityLinks = pgTable("report_activity_link", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull(),
+  projectId: text("project_id").notNull(),
+  reportId: text("report_id").notNull(),
+  scheduleItemId: text("schedule_item_id").notNull(),
+  workItemIndex: integer("work_item_index"),
+  note: text("note"),
+  createdBy: text("created_by").notNull(),
+  createdAt: ts(),
+});
+
 export const dailyReports = pgTable("daily_report", {
   id: text("id").primaryKey(),
   organizationId: text("organization_id").notNull(),
@@ -258,6 +401,8 @@ export const auditEvents = pgTable("audit_event", {
 export const schema = {
   organizations, users, authCredentials, sessions, projects, memberships, jobs,
   locations, activities, invitations, clientLinks,
+  scheduleItems, scheduleDependencies, progressUpdates, blockers, rfis, rfiResponses,
+  documents, documentRevisions, reportActivityLinks,
   dailyReports, reportRevisions,
   attachments, evidenceLinks, processingRuns, processingStages, reviewDecisions,
   issuedDocuments, auditEvents,

@@ -32,6 +32,7 @@ export default async function ProjectsPage() {
                 <small>{p.clientName ?? "No client set"} · {p.timezone}</small>
               </div>
               <div className="admin-list__actions">
+                <Link href={`/projects/${p.id}`} className="secondary-button">Overview</Link>
                 <Link href="/reports" className="secondary-button">Reports</Link>
                 {canManage && <Link href={`/projects/${p.id}/admin`} className="secondary-button">Settings</Link>}
               </div>
