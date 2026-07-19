@@ -3251,3 +3251,81 @@ textarea::placeholder { color: var(--neutral-500); opacity: 1; }
   .admin-section__heading form, .admin-section__heading button { width: 100%; }
   .onboarding-steps { grid-template-columns: 1fr; }
 }
+
+/* Session-aware header: mobile disclosure menu (hidden on desktop) */
+.app-header__mobile {
+  display: none;
+  position: relative;
+  margin-left: auto;
+}
+.app-header__mobile summary {
+  list-style: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 8px 14px;
+  border: 1px solid var(--neutral-200, #e5e7eb);
+  border-radius: 10px;
+  font-weight: 600;
+  color: var(--brand-900, #102a43);
+  background: var(--surface, #fff);
+}
+.app-header__mobile summary::-webkit-details-marker { display: none; }
+.app-header__mobile summary:focus-visible {
+  outline: 3px solid var(--brand-100, #dceaf2);
+  outline-offset: 2px;
+}
+.app-header__mobile[open] summary {
+  background: var(--brand-100, #dceaf2);
+}
+.app-header__mobile nav {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  z-index: 40;
+  min-width: 240px;
+  display: grid;
+  padding: 8px;
+  background: var(--surface, #fff);
+  border: 1px solid var(--neutral-200, #e5e7eb);
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(16, 42, 67, 0.14);
+}
+.app-header__mobile nav a {
+  display: flex;
+  align-items: center;
+  min-height: 48px;
+  padding: 0 14px;
+  border-radius: 8px;
+  color: var(--neutral-950, #111827);
+  text-decoration: none;
+  font-weight: 600;
+}
+.app-header__mobile nav a:hover,
+.app-header__mobile nav a:focus-visible {
+  background: var(--brand-100, #dceaf2);
+  outline: none;
+}
+.app-header__mobile nav a.header-capture-link {
+  background: var(--accent-600, #c65d16);
+  color: #fff;
+  margin-bottom: 4px;
+}
+
+@media (max-width: 760px) {
+  .app-header__nav {
+    display: none;
+  }
+  .app-header__mobile {
+    display: block;
+  }
+}
+
+.login-footnote-link {
+  margin-top: 8px;
+  font-size: 14px;
+}
+.login-footnote-link a { font-weight: 600; }

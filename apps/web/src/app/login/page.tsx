@@ -4,6 +4,11 @@ import { loginAction } from "@/app/actions/auth";
 export default async function LoginPage({ searchParams }: { searchParams?: Promise<Record<string, string | string[] | undefined>> }) {
   const params = (await searchParams) ?? {};
   const error = typeof params.error === "string" ? params.error : undefined;
+  const notice = params.reset === "1"
+    ? "Password updated. Sign in with your new password."
+    : params.registered === "1"
+      ? "Your workspace was created. Sign in to continue."
+      : null;
   const demoQuickLogin = process.env.DEMO_QUICK_LOGIN === "1" || process.env.NODE_ENV !== "production";
   return (
     <main id="main-content" className="login-shell">
@@ -86,6 +91,7 @@ export default async function LoginPage({ searchParams }: { searchParams?: Promi
             </button>
           </form> : null}
 
+          {notice ? <p role="status" className="login-intro"><strong>{notice}</strong></p> : null}
           {error ? (
             <p role="alert" className="login-error">
               {error === "invalid" ? "That email or password did not match. Try again."
@@ -107,6 +113,7 @@ export default async function LoginPage({ searchParams }: { searchParams?: Promi
               </label>
               <button type="submit">Sign in</button>
             </form>
+            <p className="login-footnote-link"><Link href="/forgot">Forgot password?</Link></p>
           </details>
 
           {process.env.SIGNUPS_ENABLED === "1" ? <p className="login-intro">

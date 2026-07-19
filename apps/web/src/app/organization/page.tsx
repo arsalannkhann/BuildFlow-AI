@@ -7,6 +7,8 @@ import { listAuditEvents } from "@buildflow/db/queries/audit";
 import { ROLES } from "@buildflow/domain/tenancy";
 import { inviteMemberAction, revokeInvitationAction } from "@/app/actions/admin";
 import { InviteLinkNotice } from "@/app/components/InviteLinkNotice";
+import { ResetLinkNotice } from "@/app/components/ResetLinkNotice";
+import { generateMemberResetLinkAction } from "@/app/actions/auth";
 import Link from "next/link";
 import { listOrganizationExports, organizationCommercialOverview } from "@buildflow/db/queries/organization";
 import { PLAN_LIMITS } from "@buildflow/domain/entitlements";
@@ -43,6 +45,7 @@ export default async function OrganizationPage({
   const invitations = canManageMembers ? await listInvitations(db, ctx) : [];
   const auditRows = canReadAudit ? await listAuditEvents(db, ctx, 50) : [];
   const invitedToken = typeof params.invited === "string" ? params.invited : null;
+  const resetToken = typeof params.resetToken === "string" ? params.resetToken : null;
 
   return (
     <>
@@ -61,6 +64,7 @@ export default async function OrganizationPage({
         </section>
 
         {invitedToken && <InviteLinkNotice token={invitedToken} />}
+        {resetToken && <ResetLinkNotice token={resetToken} />}
 
         <section className="surface-card admin-section" aria-labelledby="org-plan">
           <div className="admin-section__heading">
@@ -147,7 +151,7 @@ export default async function OrganizationPage({
           <h2 id="org-members">Members</h2>
           <div className="table-scroll" tabIndex={0} aria-label="Organization members table">
           <table className="admin-table">
-            <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Scope</th></tr></thead>
+            <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Scope</th>{canManageMembers ? <th><span className="sr-only">Actions</span></th> : null}</tr></thead>
             <tbody>
               {members.map((m) => (
                 <tr key={m.membershipId}>
@@ -155,6 +159,14 @@ export default async function OrganizationPage({
                   <td>{m.email ?? "—"}</td>
                   <td>{m.role ?? "custom"}</td>
                   <td>{m.projectId ? "Project" : "Organization"}</td>
+                  {canManageMembers ? (
+                    <td>
+                      <form action={generateMemberResetLinkAction}>
+                        <input type="hidden" name="userId" value={m.userId} />
+                        <button type="submit" className="secondary-button">Reset link</button>
+                      </form>
+                    </td>
+                  ) : null}
                 </tr>
               ))}
             </tbody>

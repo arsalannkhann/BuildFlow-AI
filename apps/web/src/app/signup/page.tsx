@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { registerOrganizationAction } from "@/app/actions/auth";
+import { SignupForm } from "./SignupForm";
 
 export default async function SignupPage({
   searchParams,
@@ -24,20 +24,9 @@ export default async function SignupPage({
       <div className="login-choice-panel__inner">
         <p className="eyebrow">Organization setup</p>
         <h2>Create your BuildFlow workspace</h2>
-        <p className="login-intro">You will be the organization owner. Use a work email and a password with at least 12 characters.</p>
-        {error ? <p role="alert" className="login-error">
-          {error === "limited" ? "Too many attempts. Wait before trying again."
-            : error === "conflict" ? "That account cannot be registered. Sign in or contact support."
-              : "Check the details and try again."}
-        </p> : null}
-        <form action={registerOrganizationAction} className="login-email-form">
-          <label>Organization name<input name="organizationName" required minLength={2} maxLength={120} autoComplete="organization" /></label>
-          <label>Your name<input name="ownerName" required minLength={2} maxLength={100} autoComplete="name" /></label>
-          <label>Work email<input name="email" type="email" required autoComplete="username" /></label>
-          <label>Password<input name="password" type="password" required minLength={12} autoComplete="new-password" /></label>
-          <button className="primary-button" type="submit">Create organization</button>
-        </form>
-        <p className="login-intro">Already have access? <Link href="/login">Sign in</Link></p>
+        <p className="login-intro">You will be the organization owner. Any email address works — Gmail included. Password needs at least 12 characters.</p>
+        <SignupForm initialError={error} />
+        <p className="login-intro">Already have access? <Link href="/login">Sign in</Link> · <Link href="/forgot">Forgot password?</Link></p>
       </div>
     </section>
   </main>;
