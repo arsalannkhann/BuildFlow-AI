@@ -1,8 +1,14 @@
 # Staging VM — fast-iteration environment
 
-**Purpose:** second-scale deploys for iteration; production stays on Cloud Run behind the
-full CI/CD gate. Staging carries SYNTHETIC DATA ONLY — dev auth, mock AI, local email
-outbox — so speed never risks customer data or spend.
+**Purpose:** second-scale deploys for iteration. **Since 2026-07-20 this VM shares the
+PRODUCTION resources** (Cloud SQL via Auth Proxy on 127.0.0.1:5433, the production GCS
+evidence bucket, Gemini on Vertex, Resend email from bronn.dev) — it is a second
+production frontend you can push to directly, per the darcm-style workflow. Demo
+quick-login and demo seed are OFF.
+
+**THE SHARP EDGE:** the app auto-migrates on boot. Pushing a migration-bearing commit to
+this VM migrates the PRODUCTION database immediately. Only push schema changes here when
+they are prod-ready; everything else iterates freely.
 
 ## Topology
 
@@ -11,10 +17,12 @@ outbox — so speed never risks customer data or spend.
 - **Web:** systemd `buildflow-web` → `next start` on `:3000` (firewall tag
   `buildflow-staging` allows tcp:3000)
 - **Worker:** systemd `buildflow-worker` (`JOBS_MODE=worker`)
-- **DB:** Docker `buildflow-pg` (pgvector/pg16) on `127.0.0.1:5432`, volume
-  `buildflow-pgdata` — never production Cloud SQL
-- **Env:** `/etc/buildflow/staging.env` (mock AI, local notify outbox, signups on,
-  demo quick-login on)
+- **DB:** production Cloud SQL `buildflow-pg` through `cloud-sql-proxy.service`
+  (127.0.0.1:5433, IAM-authenticated via the VM service account, cloud-platform scope)
+- **Env:** `/etc/buildflow/staging.env` (root-only, 600) — production values: Gemini,
+  GCS bucket, Resend, shared SESSION_PEPPER (sessions valid across VM and Cloud Run)
+- The old local Docker Postgres was removed; its volume `buildflow-pgdata` remains for
+  rollback to isolated-staging mode
 
 ## Deploy (the whole point)
 
@@ -47,23 +55,25 @@ gcloud compute instances stop  buildflow-staging --zone=asia-south1-a
 gcloud compute instances start buildflow-staging --zone=asia-south1-a   # IP may change
 ```
 
-## Promotion flow
+## Workflow (darcm-style)
 
-1. Iterate: `git push staging main` until the change is verified on the VM.
-2. Promote: `git push origin main` — the governed Cloud Run pipeline (full release gate,
-   digest-pinned images, Cloud SQL migration job) takes it to production.
-   Staging never deploys to prod; the two paths share nothing but the git history.
+1. **IDE on the VM:** VS Code / Cursor → Remote-SSH → host `buildflow` → open
+   `/opt/buildflow/app`. Edit and build in place (`pnpm --filter @buildflow/web build`,
+   `sudo systemctl restart buildflow-web`), or keep editing locally and
+   `git push staging main` (~1–2 min loop).
+2. **Promote:** `git push origin main` — the governed Cloud Run pipeline re-verifies and
+   ships the same commit to the managed frontend. Both frontends share one database, one
+   bucket, one job queue; a session issued on one is valid on the other.
 
-## Security posture (deliberate)
+## Security posture (production data — act accordingly)
 
-- Synthetic/demo data only; `AUTH_PROVIDER=dev`, quick-login enabled — treat the
-  environment as public. Never point it at production secrets, Cloud SQL, or the
-  production GCS bucket.
-- Port 3000 is open to the internet for review convenience; tighten the firewall rule's
-  `source-ranges` to office/home IPs if that changes.
-- To use Gemini on staging later: grant the VM's default service account
-  `roles/aiplatform.user` and set `AI_PROVIDER=gemini` + `GOOGLE_CLOUD_PROJECT` in
-  `/etc/buildflow/staging.env` (ADC works natively on GCE), then restart services.
+- This VM now serves REAL customer data with production credentials in its env file
+  (root-only 600). Demo login and demo seed are disabled; signups mirror production.
+- Port 3000 is open to the internet. Recommended next hardening: restrict the firewall
+  rule to your IPs (`gcloud compute firewall-rules update allow-buildflow-staging-web
+  --source-ranges=<your-ip>/32`) and/or front it with IAP.
+- Two workers (Cloud Run + VM) polling one job table is safe by design
+  (FOR UPDATE SKIP LOCKED lease).
 
 ## Teardown
 
