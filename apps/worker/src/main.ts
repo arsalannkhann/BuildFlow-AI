@@ -1,6 +1,7 @@
 import { getDb } from "@buildflow/db/client";
 import { runOnce } from "@buildflow/jobs/runner";
 import { pipelineJobRegistry } from "@buildflow/pipeline/jobs";
+import { sweepMissingReports } from "@buildflow/pipeline/missing-reports";
 import { errorCategory, logEvent } from "@buildflow/observability/logger";
 import { sweepStuckProcessing } from "@buildflow/db/queries/operations";
 import { enqueueRetentionSweeps } from "@buildflow/lifecycle/retention";
@@ -23,12 +24,18 @@ async function main(): Promise<void> {
   logEvent("info", "worker.started");
   let lastSweep = 0;
   let lastRetentionSchedule = 0;
+  let lastMissingCheck = 0;
   while (!stopping) {
     try {
       if (Date.now() - lastSweep >= 60_000) {
         const count = await sweepStuckProcessing(db);
         if (count > 0) logEvent("warn", "processing.stuck_swept", { count });
         lastSweep = Date.now();
+      }
+      if (Date.now() - lastMissingCheck >= 5 * 60_000) {
+        const count = await sweepMissingReports(db);
+        if (count > 0) logEvent("info", "reports.missing_flagged", { count });
+        lastMissingCheck = Date.now();
       }
       if (Date.now() - lastRetentionSchedule >= 60 * 60_000) {
         const count = await enqueueRetentionSweeps(db);
