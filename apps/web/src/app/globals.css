@@ -3329,3 +3329,224 @@ textarea::placeholder { color: var(--neutral-500); opacity: 1; }
   font-size: 14px;
 }
 .login-footnote-link a { font-weight: 600; }
+
+/* ============================================================
+   Design system v2 — rich glass layer
+   Glass is a MATERIAL for chrome (header, menus, auth panels),
+   never a default card treatment. Content surfaces stay solid
+   for readability; depth comes from layered brand-tinted
+   shadows, hairline borders, and 150–250ms ease-out state
+   motion. Contrast: text on glass sits on >=0.78-alpha white.
+   ============================================================ */
+
+:root {
+  /* glass material */
+  --glass-bg: rgba(255, 255, 255, 0.62);
+  --glass-bg-strong: rgba(255, 255, 255, 0.8);
+  --glass-border: rgba(16, 42, 67, 0.12);
+  --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+  --blur-md: 14px;
+  --blur-lg: 22px;
+
+  /* layered elevation ramp (brand-tinted, multi-layer) */
+  --shadow-xs: 0 1px 2px rgba(16, 42, 67, 0.05);
+  --shadow-md:
+    0 1px 2px rgba(16, 42, 67, 0.06),
+    0 4px 12px rgba(16, 42, 67, 0.07),
+    0 12px 28px rgba(16, 42, 67, 0.06);
+  --shadow-glass:
+    0 1px 2px rgba(16, 42, 67, 0.07),
+    0 8px 24px rgba(16, 42, 67, 0.10),
+    0 24px 56px rgba(16, 42, 67, 0.10);
+
+  /* semantic z-scale */
+  --z-dropdown: 40;
+  --z-sticky: 50;
+  --z-modal-backdrop: 60;
+  --z-modal: 70;
+  --z-toast: 80;
+
+  /* motion */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur-fast: 150ms;
+  --dur-base: 200ms;
+}
+
+/* Ambient depth: two low-alpha brand washes + one warm accent glow.
+   Content column stays calm; the wash lives at the edges. */
+body {
+  background:
+    radial-gradient(52rem 36rem at 88% -8%, rgba(220, 234, 242, 0.55), transparent 70%),
+    radial-gradient(44rem 30rem at -12% 12%, rgba(220, 234, 242, 0.5), transparent 70%),
+    radial-gradient(38rem 30rem at 96% 88%, rgba(252, 232, 213, 0.28), transparent 72%),
+    var(--neutral-50);
+  background-attachment: fixed;
+}
+
+/* --- Chrome: the one true glass surface ------------------- */
+
+.app-header {
+  z-index: var(--z-sticky);
+  background:
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.58));
+  backdrop-filter: blur(var(--blur-lg)) saturate(1.5);
+  -webkit-backdrop-filter: blur(var(--blur-lg)) saturate(1.5);
+  border-bottom: 1px solid var(--glass-border);
+  box-shadow: var(--glass-highlight), 0 1px 0 rgba(255, 255, 255, 0.4), var(--shadow-xs);
+}
+
+.app-header__nav > a:not(.user-pill):not(.header-capture-link) {
+  border-radius: 10px;
+  padding: 8px 12px;
+  transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+.app-header__nav > a:not(.user-pill):not(.header-capture-link):hover {
+  background: rgba(16, 42, 67, 0.06);
+}
+
+.app-header__mobile nav {
+  z-index: var(--z-dropdown);
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(var(--blur-lg)) saturate(1.5);
+  -webkit-backdrop-filter: blur(var(--blur-lg)) saturate(1.5);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-highlight), var(--shadow-glass);
+  animation: menu-in var(--dur-base) var(--ease-out);
+  transform-origin: top right;
+}
+@keyframes menu-in {
+  from { opacity: 0; transform: translateY(-6px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* --- Auth surfaces: aurora panel + glass form -------------- */
+
+.login-brand-panel {
+  background:
+    radial-gradient(42rem 30rem at 82% -10%, rgba(31, 78, 109, 0.85), transparent 68%),
+    radial-gradient(30rem 26rem at -10% 110%, rgba(168, 72, 18, 0.35), transparent 66%),
+    linear-gradient(160deg, var(--brand-950), var(--brand-900) 55%, var(--brand-800));
+}
+
+.login-choice-panel .role-card,
+.login-email-details,
+.login-email-form input {
+  transition:
+    transform var(--dur-base) var(--ease-out),
+    box-shadow var(--dur-base) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out);
+}
+.login-choice-panel .role-card {
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(var(--blur-md));
+  -webkit-backdrop-filter: blur(var(--blur-md));
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-highlight), var(--shadow-xs);
+}
+.login-choice-panel .role-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--glass-highlight), var(--shadow-md);
+  border-color: rgba(31, 78, 109, 0.3);
+}
+.login-choice-panel .role-card:active {
+  transform: translateY(0);
+  transition-duration: 80ms;
+}
+
+/* --- Content surfaces: solid, layered, quietly elevated ---- */
+
+.surface-card {
+  border: 1px solid rgba(16, 42, 67, 0.08);
+  box-shadow: var(--shadow-xs);
+}
+
+.report-row,
+.admin-list__row,
+.metric-card {
+  transition:
+    transform var(--dur-base) var(--ease-out),
+    box-shadow var(--dur-base) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out);
+}
+.report-row:hover,
+.admin-list__row:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.metric-card--attention {
+  box-shadow:
+    inset 0 0 0 1px rgba(138, 95, 0, 0.16),
+    0 8px 20px rgba(138, 95, 0, 0.08);
+}
+
+.primary-button,
+.secondary-button {
+  transition:
+    transform var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out);
+}
+.primary-button:hover { transform: translateY(-1px); box-shadow: var(--shadow-md); }
+.primary-button:active,
+.secondary-button:active { transform: translateY(0) scale(0.99); transition-duration: 60ms; }
+.secondary-button:hover { box-shadow: var(--shadow-xs); }
+.primary-button:disabled {
+  transform: none;
+  box-shadow: none;
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Field hero (capture entry) gets the one committed-color moment. */
+.field-record-action__orb {
+  box-shadow:
+    0 0 0 8px rgba(168, 72, 18, 0.08),
+    0 12px 32px rgba(168, 72, 18, 0.35);
+  transition: box-shadow var(--dur-base) var(--ease-out), transform var(--dur-base) var(--ease-out);
+}
+.field-record-action:hover .field-record-action__orb {
+  transform: scale(1.04);
+  box-shadow:
+    0 0 0 12px rgba(168, 72, 18, 0.1),
+    0 16px 40px rgba(168, 72, 18, 0.42);
+}
+
+/* Tables: calmer headers, hover affordance on rows */
+.admin-table thead th {
+  background: rgba(16, 42, 67, 0.035);
+}
+.admin-table tbody tr {
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+.admin-table tbody tr:hover {
+  background: rgba(220, 234, 242, 0.25);
+}
+
+/* Notices (invite / reset links) read as elevated glass chips */
+.admin-invite-notice {
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(var(--blur-md));
+  -webkit-backdrop-filter: blur(var(--blur-md));
+  border: 1px solid rgba(31, 78, 109, 0.22);
+  box-shadow: var(--glass-highlight), var(--shadow-md);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-header__mobile nav { animation: none; }
+  .report-row, .admin-list__row, .metric-card, .primary-button, .secondary-button,
+  .login-choice-panel .role-card, .field-record-action__orb,
+  .app-header__nav > a {
+    transition: none;
+  }
+  .report-row:hover, .admin-list__row:hover, .primary-button:hover,
+  .login-choice-panel .role-card:hover { transform: none; }
+  body { background-attachment: scroll; }
+}
+
+@supports not (backdrop-filter: blur(1px)) {
+  .app-header, .app-header__mobile nav, .admin-invite-notice,
+  .login-choice-panel .role-card { background: rgba(255, 255, 255, 0.96); }
+}

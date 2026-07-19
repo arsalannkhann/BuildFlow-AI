@@ -13,7 +13,7 @@ import {
   type ViewStyle,
 } from "react-native";
 import type { StatusTone } from "../lib/report-status";
-import { TOUCH_TARGET, colors, radius, spacing, typography } from "./theme";
+import { TOUCH_TARGET, colors, elevation, glass, radius, spacing, typography } from "./theme";
 
 const toneStyles: Record<StatusTone, { bg: string; fg: string }> = {
   neutral: { bg: colors.neutral200, fg: colors.neutral700 },
@@ -188,9 +188,10 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: colors.surface,
-    borderRadius: radius.card,
+    borderColor: glass.border,
     borderWidth: 1,
-    borderColor: colors.neutral200,
+    ...elevation.raised,
+    borderRadius: radius.card,
     padding: spacing(4),
     gap: spacing(2),
   },

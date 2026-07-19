@@ -31,6 +31,36 @@ export const radius = {
 /** Minimum primary touch target (dp). */
 export const TOUCH_TARGET = 48;
 
+/**
+ * Elevation system (rich-surface refresh, kept blur-free on purpose: runtime
+ * backdrop blur is too expensive for low-end field Androids — depth comes from
+ * brand-tinted shadows and translucent layering instead).
+ */
+export const elevation = {
+  raised: {
+    shadowColor: colors.brand900,
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+  floating: {
+    shadowColor: colors.brand900,
+    shadowOpacity: 0.14,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 8,
+  },
+} as const;
+
+/** Translucent layering over the navy field-hero surfaces. */
+export const glass = {
+  onDark: "rgba(255,255,255,0.12)",
+  onDarkStrong: "rgba(255,255,255,0.2)",
+  border: "rgba(16,42,67,0.10)",
+  borderOnDark: "rgba(255,255,255,0.22)",
+} as const;
+
 export const typography = {
   pageTitle: { fontSize: 28, lineHeight: 36, fontWeight: "700" },
   sectionTitle: { fontSize: 22, lineHeight: 30, fontWeight: "700" },
