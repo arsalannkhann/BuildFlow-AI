@@ -13,17 +13,17 @@ evidence.
 | 4 | Manager corrects, approves, issues immutable PDF | e2e dpr-flow + review field-decision tests | partial |
 | 5 | Client opens only the authorized client-safe report | client-link tests (expiry, revocation, scope) | partial |
 | 6 | Cross-org user cannot access any record or attachment | cross-tenant suites + RLS tests | partial |
-| 7 | Challan photo → reviewed receipt lines → inventory updated exactly once | | pending |
-| 8 | Invoice reviewed → reflected in project cost reporting | | pending |
-| 9 | QS submits and verifies measured-work entry; immutable correction history | | pending |
-| 10 | Manager creates RFQ; authorized user approves PO draft | | pending |
-| 11 | Labour and equipment logs appear in daily project overview | | pending |
+| 7 | Challan photo → reviewed receipt lines → inventory updated exactly once | materials-core tests (receipt-posted-twice exactly-once) | partial |
+| 8 | Invoice reviewed → reflected in project cost reporting | invoices-core tests (approve-twice posts costs once; rollups) | partial |
+| 9 | QS submits and verifies measured-work entry; immutable correction history | mb-core tests (state gates, certified append-only, correction supersession) | partial |
+| 10 | Manager creates RFQ; authorized user approves PO draft | procurement-core tests (procurement.approve gate, export stamping) | partial |
+| 11 | Labour and equipment logs appear in daily project overview | labour/equipment tabs + productivity join tests | partial |
 | 12 | Approved DPR updates linked activity progress without inventing a percentage | controls-core test (evidence-linked progress, link ≠ percent) | partial |
 | 13 | Executive traces every dashboard warning to source records | | pending |
 | 14 | Assistant answers with citations; refuses on insufficient evidence | | pending |
 | 15 | Compliance user exports versioned evidence pack, sees missing requirements | | pending |
 | 16 | Retrying upload/command/job never duplicates | sync-core replay test + jobs idempotency tests | partial |
-| 17 | Issued reports, certified measurements, approved financials cannot be silently overwritten | immutability tests (issue supersession; MB certification pending) | partial |
+| 17 | Issued reports, certified measurements, approved financials cannot be silently overwritten | issue supersession + certified-MB append-only + immutable budget version tests | partial |
 | 18 | Export/deletion respect retention and audit policy | | pending |
 | 19 | Web meets accessibility checks; works mobile + desktop | | pending |
 | 20 | Build, migrations, unit, integration, critical e2e all pass | CI + local gates (continuously) | partial |
