@@ -37,7 +37,17 @@ ssh buildflow 'cd /home/arsalan/buildflow && sudo docker compose -f docker-compo
 ssh buildflow 'cd /home/arsalan/buildflow && sudo docker compose -f docker-compose.production.yml restart web'
 ```
 
-## DNS for bronn.dev
+## DNS for bronn.dev — LIVE (verified 2026-07-20)
+
+`bronn.dev` and `www.bronn.dev` are A records to `34.14.159.96` **through the Cloudflare
+proxy** (orange cloud). Cloudflare terminates TLS at the edge and forwards to Caddy on the
+VM, so HTTPS works without Caddy needing its own certificate. Verified: app 200, CSS 200,
+API 401 on bad credentials.
+
+If you ever switch the records to "DNS only" (grey cloud), Caddy will issue its own
+Let's Encrypt certificate on first request — both paths work, but don't switch mid-incident.
+
+## Original DNS setup notes
 
 Point these at the VM, then Caddy issues certificates automatically on first request:
 
