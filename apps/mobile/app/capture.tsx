@@ -1,7 +1,5 @@
-// /capture — record → pause/resume/finish with a visible timer, playback
-// before submit, photos (camera/gallery with EXIF), optional note, project +
-// date confirmation. Submit = durable local save FIRST, then background sync.
-// This screen never requires connectivity.
+// /capture — an offline-first field update with voice, evidence and context.
+// Files are committed to durable local storage before background sync begins.
 
 import { Ionicons } from "@expo/vector-icons";
 import {
@@ -18,8 +16,21 @@ import { Directory, File, Paths } from "expo-file-system";
 import * as ImagePicker from "expo-image-picker";
 import { useKeepAwake } from "expo-keep-awake";
 import { useRouter } from "expo-router";
-import { useState } from "react";
-import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { StatusBar } from "expo-status-bar";
+import { useCallback, useEffect, useState } from "react";
+import {
+  Alert,
+  BackHandler,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { exifHasLocation, exifTimestampToIso, isoNowWithOffset } from "../src/lib/exif";
 import { useI18n } from "../src/lib/i18n";
@@ -28,12 +39,22 @@ import { useSession } from "../src/state/session";
 import { useSync } from "../src/state/sync";
 import {
   BodyText,
-  Card,
+  IconButton,
+  NoticeCard,
   PrimaryButton,
   SecondaryButton,
   SupportingText,
 } from "../src/ui/components";
-import { TOUCH_TARGET, colors, radius, spacing } from "../src/ui/theme";
+import {
+  TOUCH_TARGET,
+  colors,
+  elevation,
+  glass,
+  layout,
+  radius,
+  spacing,
+  typography,
+} from "../src/ui/theme";
 
 type Phase = "idle" | "recording" | "paused" | "recorded";
 
@@ -59,7 +80,7 @@ const todayIsoDate = (): string => {
 };
 
 export default function CaptureScreen() {
-  useKeepAwake(); // recording must survive the screen dimming (design.md §6)
+  useKeepAwake();
   const { t } = useI18n();
   const router = useRouter();
   const session = useSession();
@@ -84,18 +105,62 @@ export default function CaptureScreen() {
 
   const project = session.selectedProject;
   const reportDate = todayIsoDate();
+  const hasUnsavedWork = phase !== "idle" || photos.length > 0 || note.trim().length > 0;
+
+  const confirmClose = useCallback(() => {
+    if (busy) return;
+    if (!hasUnsavedWork) {
+      router.back();
+      return;
+    }
+    Alert.alert(t("capture.discardTitle"), t("capture.discardBody"), [
+      { text: t("common.cancel"), style: "cancel" },
+      {
+        text: t("capture.discard"),
+        style: "destructive",
+        onPress: () => {
+          void (async () => {
+            if (playerStatus.playing) player.pause();
+            if (phase === "recording" || phase === "paused") {
+              try {
+                await recorder.stop();
+              } catch {
+                // The recorder may already have stopped while the dialog was open.
+              }
+            }
+            router.back();
+          })();
+        },
+      },
+    ]);
+  }, [busy, hasUnsavedWork, phase, player, playerStatus.playing, recorder, router, t]);
+
+  useEffect(() => {
+    if (Platform.OS !== "android") return;
+    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+      confirmClose();
+      return true;
+    });
+    return () => subscription.remove();
+  }, [confirmClose]);
 
   const startRecording = async () => {
     const permission = await requestRecordingPermissionsAsync();
     if (!permission.granted) {
-      setMicDenied(true); // photo + note fallback stays available
+      setMicDenied(true);
       return;
     }
     setMicDenied(false);
-    await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
-    await recorder.prepareToRecordAsync();
-    recorder.record();
-    setPhase("recording");
+    setFormError(null);
+    try {
+      await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
+      await recorder.prepareToRecordAsync();
+      recorder.record();
+      setPhase("recording");
+    } catch {
+      setPhase("idle");
+      setFormError(t("capture.recordError"));
+    }
   };
 
   const pauseRecording = () => {
@@ -110,14 +175,19 @@ export default function CaptureScreen() {
 
   const finishRecording = async () => {
     const duration = recorderState.durationMillis;
-    await recorder.stop();
-    if (recorder.uri) {
-      setAudioUri(recorder.uri);
-      setAudioDurationMs(duration);
-      setAudioCapturedAt(isoNowWithOffset(new Date()));
-      setPhase("recorded");
-    } else {
+    try {
+      await recorder.stop();
+      if (recorder.uri) {
+        setAudioUri(recorder.uri);
+        setAudioDurationMs(duration);
+        setAudioCapturedAt(isoNowWithOffset(new Date()));
+        setPhase("recorded");
+      } else {
+        setPhase("idle");
+      }
+    } catch {
       setPhase("idle");
+      setFormError(t("capture.recordError"));
     }
   };
 
@@ -144,8 +214,6 @@ export default function CaptureScreen() {
     const next = assets.map<PhotoDraft>((asset) => ({
       uri: asset.uri,
       contentType: asset.mimeType ?? "image/jpeg",
-      // Preserve the EXIF timestamp when present; originals keep their GPS
-      // data because bytes are uploaded unmodified (checksum-verified).
       ...(exifTimestampToIso(asset.exif, new Date())
         ? { capturedAt: exifTimestampToIso(asset.exif, new Date()) }
         : {}),
@@ -155,35 +223,44 @@ export default function CaptureScreen() {
   };
 
   const takePhoto = async () => {
-    const permission = await ImagePicker.requestCameraPermissionsAsync();
-    if (!permission.granted) {
-      setCameraDenied(true);
-      return;
+    try {
+      setFormError(null);
+      const permission = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permission.granted) {
+        setCameraDenied(true);
+        return;
+      }
+      setCameraDenied(false);
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ["images"],
+        quality: 0.85,
+        exif: true,
+      });
+      if (!result.canceled) addAssets(result.assets);
+    } catch {
+      setFormError(t("capture.photoError"));
     }
-    setCameraDenied(false);
-    const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ["images"],
-      quality: 0.85,
-      exif: true,
-    });
-    if (!result.canceled) addAssets(result.assets);
   };
 
   const pickFromGallery = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"],
-      allowsMultipleSelection: true,
-      quality: 0.85,
-      exif: true,
-    });
-    if (!result.canceled) addAssets(result.assets);
+    try {
+      setFormError(null);
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        allowsMultipleSelection: true,
+        quality: 0.85,
+        exif: true,
+      });
+      if (!result.canceled) addAssets(result.assets);
+    } catch {
+      setFormError(t("capture.photoError"));
+    }
   };
 
   const removePhoto = (uri: string) => {
     setPhotos((existing) => existing.filter((photo) => photo.uri !== uri));
   };
 
-  /** Copies capture files into app-owned storage so drafts survive cache cleanup. */
   const persistFiles = (): CaptureAttachmentInput[] => {
     if (!audioUri) throw new Error(t("capture.needAudio"));
     const captureId = Crypto.randomUUID();
@@ -231,265 +308,477 @@ export default function CaptureScreen() {
         ...(note.trim() ? { note: note.trim() } : {}),
         attachments: persistFiles(),
       };
-      // Durable local commit is the ack; sync happens in the background.
       if (submit) await submitCapture(input);
       else await saveDraft(input);
       router.back();
-    } catch (error) {
-      setFormError(error instanceof Error ? error.message : String(error));
+    } catch {
+      setFormError(t("capture.saveError"));
       setBusy(false);
     }
   };
 
   const timerMillis = phase === "recorded" ? audioDurationMs : recorderState.durationMillis;
+  const recordingState =
+    phase === "recording"
+      ? t("capture.recording")
+      : phase === "paused"
+        ? t("capture.paused")
+        : phase === "recorded"
+          ? t("capture.ready")
+          : t("capture.start");
 
   return (
     <SafeAreaView edges={["top", "bottom"]} style={styles.safe}>
+      <StatusBar style="light" />
       <View style={styles.header}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t("common.cancel")}
-          onPress={() => router.back()}
-          style={styles.closeButton}
-        >
-          <Ionicons name="close" size={26} color={colors.surface} />
-        </Pressable>
-        <Text accessibilityRole="header" style={styles.headerTitle}>
-          {t("capture.title")}
-        </Text>
-        <View style={styles.closeButton} />
+        <IconButton
+          icon="close"
+          label={t("common.cancel")}
+          onPress={confirmClose}
+          light
+        />
+        <View style={styles.headerCopy}>
+          <Text style={styles.headerEyebrow}>{t("capture.contextLabel")}</Text>
+          <Text accessibilityRole="header" numberOfLines={1} style={styles.headerTitle}>
+            {t("capture.title")}
+          </Text>
+        </View>
+        <View style={styles.headerBalance} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-        {/* Recording block */}
-        <Card style={styles.recordCard}>
-          <Text
-            accessibilityLabel={`${t(
-              phase === "recording"
-                ? "capture.recording"
-                : phase === "paused"
-                  ? "capture.paused"
-                  : "capture.title",
-            )} ${formatTimer(timerMillis)}`}
-            style={styles.timer}
-          >
-            {formatTimer(timerMillis)}
-          </Text>
-          {phase === "recording" || phase === "paused" ? (
-            <SupportingText style={styles.recordState}>
-              {phase === "recording" ? t("capture.recording") : t("capture.paused")}
-            </SupportingText>
-          ) : null}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        style={styles.flex}
+      >
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardDismissMode="on-drag"
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.content}>
+            <View style={styles.contextBar}>
+              <View style={styles.contextIcon}>
+                <Ionicons name="business-outline" size={20} color={colors.brand800} />
+              </View>
+              <View style={styles.contextCopy}>
+                <Text numberOfLines={1} style={styles.contextTitle}>
+                  {project?.name ?? t("today.noProject")}
+                </Text>
+                <Text style={styles.contextMeta}>{reportDate}</Text>
+              </View>
+              <Ionicons name="lock-closed-outline" size={18} color={colors.neutral500} />
+            </View>
 
-          {/* Prompt chips are reminders, not required sections. */}
-          {phase !== "recorded" ? (
-            <View style={styles.promptChips}>
-              {(
-                [
-                  "capture.chip.work",
-                  "capture.chip.labour",
-                  "capture.chip.materials",
-                  "capture.chip.blockers",
-                  "capture.chip.tomorrow",
-                ] as const
-              ).map((key) => (
-                <View key={key} style={styles.promptChip}>
-                  <Text style={styles.promptChipText}>{t(key)}</Text>
+            <View style={styles.voiceCard}>
+              <View style={styles.stepHeader}>
+                <View style={[styles.stepBadge, styles.stepBadgeDark]}>
+                  <Text style={styles.stepBadgeDarkText}>01</Text>
                 </View>
-              ))}
-            </View>
-          ) : null}
+                <View style={styles.stepCopy}>
+                  <Text style={styles.stepTitleLight}>{t("capture.voiceStep")}</Text>
+                  <Text style={styles.stepHelpLight}>{t("capture.voiceStepHelp")}</Text>
+                </View>
+              </View>
 
-          {micDenied ? (
-            <View style={styles.noticeWarning}>
-              <SupportingText style={{ color: colors.warning700 }}>
-                {t("capture.micDenied")}
-              </SupportingText>
-            </View>
-          ) : null}
+              <View style={styles.recordingStatus}>
+                <View
+                  style={[
+                    styles.recordingDot,
+                    phase === "recording" && styles.recordingDotActive,
+                  ]}
+                />
+                <Text style={styles.recordingStatusText}>{recordingState}</Text>
+              </View>
+              <Text
+                accessibilityLabel={`${recordingState} ${formatTimer(timerMillis)}`}
+                style={styles.timer}
+              >
+                {formatTimer(timerMillis)}
+              </Text>
 
-          {phase === "idle" ? (
-            <PrimaryButton
-              accent
-              icon={<Ionicons name="mic" size={24} color={colors.surface} />}
-              label={t("capture.start")}
-              onPress={() => void startRecording()}
-            />
-          ) : null}
-          {phase === "recording" ? (
-            <View style={styles.recordControls}>
-              <SecondaryButton label={t("capture.pause")} onPress={pauseRecording} style={styles.flexGrow} />
-              <PrimaryButton
-                accent
-                label={t("capture.finish")}
-                onPress={() => void finishRecording()}
-                style={styles.flexGrow}
-              />
-            </View>
-          ) : null}
-          {phase === "paused" ? (
-            <View style={styles.recordControls}>
-              <SecondaryButton label={t("capture.resume")} onPress={resumeRecording} style={styles.flexGrow} />
-              <PrimaryButton
-                accent
-                label={t("capture.finish")}
-                onPress={() => void finishRecording()}
-                style={styles.flexGrow}
-              />
-            </View>
-          ) : null}
-          {phase === "recorded" ? (
-            <View style={styles.recordControls}>
-              <SecondaryButton
-                label={playerStatus.playing ? t("capture.stop") : t("capture.play")}
-                onPress={togglePlayback}
-                style={styles.flexGrow}
-              />
-              <SecondaryButton
-                label={t("capture.reRecord")}
-                onPress={discardRecording}
-                style={styles.flexGrow}
-              />
-            </View>
-          ) : null}
+              {phase !== "recorded" ? (
+                <View style={styles.promptChips}>
+                  {(
+                    [
+                      "capture.chip.work",
+                      "capture.chip.labour",
+                      "capture.chip.materials",
+                      "capture.chip.blockers",
+                      "capture.chip.tomorrow",
+                    ] as const
+                  ).map((key) => (
+                    <View key={key} style={styles.promptChip}>
+                      <Text style={styles.promptChipText}>{t(key)}</Text>
+                    </View>
+                  ))}
+                </View>
+              ) : null}
 
-          <SupportingText>{t("capture.audioLocal")}</SupportingText>
-        </Card>
+              {micDenied ? (
+                <NoticeCard
+                  body={t("capture.micDenied")}
+                  icon="mic-off-outline"
+                  title={t("capture.voiceStep")}
+                  tone="warning"
+                />
+              ) : null}
 
-        {/* Photos */}
-        <Card>
-          <BodyText strong>{t("capture.addPhotos")}</BodyText>
-          {photos.length > 0 ? (
-            <>
-              <SupportingText>
-                {photos.length === 1
-                  ? t("capture.photoCountOne")
-                  : t("capture.photoCount", { count: photos.length })}
-              </SupportingText>
-              <ScrollView horizontal contentContainerStyle={styles.photoRail}>
-                {photos.map((photo) => (
-                  <View key={photo.uri} style={styles.photoWrap}>
-                    <Image
-                      accessibilityIgnoresInvertColors
-                      source={{ uri: photo.uri }}
-                      style={styles.photoThumb}
-                    />
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel={t("capture.removePhoto")}
-                      onPress={() => removePhoto(photo.uri)}
-                      style={styles.photoRemove}
-                    >
-                      <Ionicons name="close" size={16} color={colors.surface} />
-                    </Pressable>
-                    <SupportingText style={styles.photoMeta}>
-                      {photo.hasLocation ? t("capture.photoLocation") : t("capture.photoNoLocation")}
-                    </SupportingText>
-                  </View>
-                ))}
-              </ScrollView>
-            </>
-          ) : null}
-          {cameraDenied ? (
-            <View style={styles.noticeWarning}>
-              <SupportingText style={{ color: colors.warning700 }}>
-                {t("capture.cameraDenied")}
-              </SupportingText>
+              {phase === "idle" ? (
+                <PrimaryButton
+                  accent
+                  icon={<Ionicons name="mic" size={23} color={colors.surface} />}
+                  label={t("capture.start")}
+                  onPress={() => void startRecording()}
+                />
+              ) : null}
+              {phase === "recording" || phase === "paused" ? (
+                <View style={styles.controlRow}>
+                  <SecondaryButton
+                    icon={phase === "recording" ? "pause" : "play"}
+                    label={phase === "recording" ? t("capture.pause") : t("capture.resume")}
+                    onPress={phase === "recording" ? pauseRecording : resumeRecording}
+                    style={styles.flexGrow}
+                  />
+                  <PrimaryButton
+                    accent
+                    icon={<Ionicons name="stop" size={20} color={colors.surface} />}
+                    label={t("capture.finish")}
+                    onPress={() => void finishRecording()}
+                    style={styles.flexGrow}
+                  />
+                </View>
+              ) : null}
+              {phase === "recorded" ? (
+                <View style={styles.controlRow}>
+                  <SecondaryButton
+                    icon={playerStatus.playing ? "pause" : "volume-high"}
+                    label={playerStatus.playing ? t("capture.stop") : t("capture.play")}
+                    onPress={togglePlayback}
+                    style={styles.flexGrow}
+                  />
+                  <SecondaryButton
+                    icon="refresh"
+                    label={t("capture.reRecord")}
+                    onPress={discardRecording}
+                    style={styles.flexGrow}
+                  />
+                </View>
+              ) : null}
+
+              <View style={styles.localNote}>
+                <Ionicons name="phone-portrait-outline" size={16} color={colors.neutral500} />
+                <Text style={styles.localNoteText}>{t("capture.audioLocal")}</Text>
+              </View>
             </View>
-          ) : null}
-          <View style={styles.recordControls}>
-            <SecondaryButton
-              label={t("capture.takePhoto")}
-              onPress={() => void takePhoto()}
-              style={styles.flexGrow}
-            />
-            <SecondaryButton
-              label={t("capture.fromGallery")}
-              onPress={() => void pickFromGallery()}
-              style={styles.flexGrow}
-            />
+
+            <View style={styles.sectionCard}>
+              <View style={styles.stepHeader}>
+                <View style={styles.stepBadge}>
+                  <Text style={styles.stepBadgeText}>02</Text>
+                </View>
+                <View style={styles.stepCopy}>
+                  <Text style={styles.stepTitle}>{t("capture.evidenceStep")}</Text>
+                  <Text style={styles.stepHelp}>{t("capture.evidenceStepHelp")}</Text>
+                </View>
+              </View>
+
+              {photos.length > 0 ? (
+                <>
+                  <Text style={styles.photoCount}>
+                    {photos.length === 1
+                      ? t("capture.photoCountOne")
+                      : t("capture.photoCount", { count: photos.length })}
+                  </Text>
+                  <ScrollView
+                    horizontal
+                    contentContainerStyle={styles.photoRail}
+                    showsHorizontalScrollIndicator={false}
+                  >
+                    {photos.map((photo) => (
+                      <View key={photo.uri} style={styles.photoWrap}>
+                        <Image
+                          accessibilityIgnoresInvertColors
+                          source={{ uri: photo.uri }}
+                          style={styles.photoThumb}
+                        />
+                        <Pressable
+                          accessibilityLabel={t("capture.removePhoto")}
+                          accessibilityRole="button"
+                          android_ripple={{ color: colors.neutral700, borderless: true }}
+                          hitSlop={8}
+                          onPress={() => removePhoto(photo.uri)}
+                          style={styles.photoRemove}
+                        >
+                          <Ionicons name="close" size={18} color={colors.surface} />
+                        </Pressable>
+                        <View style={styles.photoMetaRow}>
+                          <Ionicons
+                            name={photo.hasLocation ? "location" : "location-outline"}
+                            size={13}
+                            color={photo.hasLocation ? colors.success700 : colors.neutral500}
+                          />
+                          <Text numberOfLines={1} style={styles.photoMeta}>
+                            {photo.hasLocation
+                              ? t("capture.photoLocation")
+                              : t("capture.photoNoLocation")}
+                          </Text>
+                        </View>
+                      </View>
+                    ))}
+                  </ScrollView>
+                </>
+              ) : (
+                <View style={styles.photoEmpty}>
+                  <Ionicons name="images-outline" size={24} color={colors.neutral500} />
+                  <SupportingText>{t("capture.photoEmpty")}</SupportingText>
+                </View>
+              )}
+
+              {cameraDenied ? (
+                <NoticeCard
+                  body={t("capture.cameraDenied")}
+                  icon="camera-outline"
+                  title={t("capture.takePhoto")}
+                  tone="warning"
+                />
+              ) : null}
+
+              <View style={styles.evidenceActions}>
+                <EvidenceAction
+                  icon="camera"
+                  label={t("capture.takePhoto")}
+                  onPress={() => void takePhoto()}
+                />
+                <EvidenceAction
+                  icon="images"
+                  label={t("capture.fromGallery")}
+                  onPress={() => void pickFromGallery()}
+                />
+              </View>
+            </View>
+
+            <View style={styles.sectionCard}>
+              <View style={styles.stepHeader}>
+                <View style={styles.stepBadge}>
+                  <Text style={styles.stepBadgeText}>03</Text>
+                </View>
+                <View style={styles.stepCopy}>
+                  <Text style={styles.stepTitle}>{t("capture.detailsStep")}</Text>
+                  <Text style={styles.stepHelp}>{t("capture.detailsStepHelp")}</Text>
+                </View>
+              </View>
+
+              <View style={styles.detailsPanel}>
+                <View style={styles.detailRow}>
+                  <SupportingText>{t("capture.project")}</SupportingText>
+                  <Text numberOfLines={1} style={styles.detailValue}>
+                    {project?.name ?? t("today.noProject")}
+                  </Text>
+                </View>
+                <View style={styles.detailDivider} />
+                <View style={styles.detailRow}>
+                  <SupportingText>{t("capture.date")}</SupportingText>
+                  <BodyText strong>{reportDate}</BodyText>
+                </View>
+              </View>
+
+              <View>
+                <View style={styles.inputLabelRow}>
+                  <BodyText nativeID="capture-note-label" strong>
+                    {t("capture.notePlaceholder")}
+                  </BodyText>
+                  <SupportingText>{t("capture.characters", { count: note.length })}</SupportingText>
+                </View>
+                <TextInput
+                  accessibilityLabelledBy="capture-note-label"
+                  editable={!busy}
+                  maxLength={2000}
+                  multiline
+                  onChangeText={setNote}
+                  placeholder={t("capture.noteHint")}
+                  placeholderTextColor={colors.neutral500}
+                  style={styles.noteInput}
+                  textAlignVertical="top"
+                  value={note}
+                />
+              </View>
+            </View>
+
+            {formError ? (
+              <NoticeCard body={formError} icon="alert-circle-outline" tone="danger" />
+            ) : null}
           </View>
-        </Card>
+        </ScrollView>
 
-        {/* Note + confirmation */}
-        <Card>
-          <BodyText strong nativeID="capture-note-label">
-            {t("capture.notePlaceholder")}
-          </BodyText>
-          <TextInput
-            accessibilityLabelledBy="capture-note-label"
-            editable={!busy}
-            maxLength={2000}
-            multiline
-            onChangeText={setNote}
-            style={styles.noteInput}
-            value={note}
+        <View style={styles.actionDock}>
+          <PrimaryButton
+            busy={busy}
+            disabled={!audioUri || !project}
+            icon={<Ionicons name="arrow-up-circle" size={22} color={colors.surface} />}
+            label={busy ? t("capture.saving") : t("capture.submit")}
+            onPress={() => void save(true)}
           />
-          <View style={styles.confirmRow}>
-            <SupportingText>{t("capture.project")}</SupportingText>
-            <BodyText strong>{project?.name ?? t("today.noProject")}</BodyText>
-          </View>
-          <View style={styles.confirmRow}>
-            <SupportingText>{t("capture.date")}</SupportingText>
-            <BodyText strong>{reportDate}</BodyText>
-          </View>
-        </Card>
-
-        {formError ? (
-          <View accessibilityLiveRegion="polite" style={styles.noticeError}>
-            <BodyText style={{ color: colors.danger700 }}>{formError}</BodyText>
-          </View>
-        ) : null}
-
-        <PrimaryButton
-          busy={busy}
-          disabled={!audioUri || !project}
-          label={busy ? t("capture.saving") : t("capture.submit")}
-          onPress={() => void save(true)}
-        />
-        <SecondaryButton
-          disabled={busy || !audioUri || !project}
-          label={t("capture.saveLater")}
-          onPress={() => void save(false)}
-        />
-      </ScrollView>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{ disabled: busy || !audioUri || !project }}
+            android_ripple={{ color: colors.brand100 }}
+            disabled={busy || !audioUri || !project}
+            onPress={() => void save(false)}
+            style={({ pressed }) => [
+              styles.saveLaterButton,
+              pressed && styles.saveLaterPressed,
+              (busy || !audioUri || !project) && styles.saveLaterDisabled,
+            ]}
+          >
+            <Ionicons name="download-outline" size={19} color={colors.brand800} />
+            <Text style={styles.saveLaterText}>{t("capture.saveLater")}</Text>
+          </Pressable>
+        </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
+function EvidenceAction({
+  icon,
+  label,
+  onPress,
+}: {
+  icon: "camera" | "images";
+  label: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityLabel={label}
+      accessibilityRole="button"
+      android_ripple={{ color: colors.brand100 }}
+      onPress={onPress}
+      style={({ pressed }) => [styles.evidenceAction, pressed && styles.evidenceActionPressed]}
+    >
+      <View style={styles.evidenceIcon}>
+        <Ionicons name={icon} size={22} color={colors.brand800} />
+      </View>
+      <Text style={styles.evidenceLabel}>{label}</Text>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.brand900 },
+  flex: { flex: 1 },
+  safe: { flex: 1, backgroundColor: colors.brand950 },
   header: {
+    minHeight: 72,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: spacing(2),
-    paddingVertical: spacing(2),
-    backgroundColor: colors.brand900,
+    paddingHorizontal: layout.horizontal,
+    paddingVertical: spacing(1),
+    backgroundColor: colors.brand950,
   },
-  headerTitle: { color: colors.surface, fontSize: 18, lineHeight: 26, fontWeight: "600" },
-  closeButton: {
-    width: TOUCH_TARGET,
-    height: TOUCH_TARGET,
+  headerCopy: { flex: 1, paddingHorizontal: spacing(2) },
+  headerEyebrow: {
+    ...typography.overline,
+    color: colors.accent600,
+    marginBottom: 2,
+  },
+  headerTitle: { ...typography.cardTitle, color: colors.surface },
+  headerBalance: { width: TOUCH_TARGET, height: TOUCH_TARGET },
+  scrollContent: {
+    flexGrow: 1,
+    backgroundColor: colors.paper,
+    paddingBottom: spacing(5),
+  },
+  content: {
+    width: "100%",
+    maxWidth: layout.maxContentWidth,
+    alignSelf: "center",
+    padding: layout.horizontal,
+    gap: spacing(4),
+  },
+  contextBar: {
+    minHeight: 64,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing(3),
+    paddingHorizontal: spacing(3),
+    paddingVertical: spacing(2),
+    borderWidth: 1,
+    borderColor: colors.neutral200,
+    borderRadius: radius.control,
+    backgroundColor: colors.surface,
+  },
+  contextIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.compact,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: colors.brand50,
   },
-  container: {
+  contextCopy: { flex: 1, minWidth: 0 },
+  contextTitle: { ...typography.bodyStrong, color: colors.neutral950 },
+  contextMeta: { ...typography.caption, color: colors.neutral500, marginTop: 1 },
+  voiceCard: {
     padding: spacing(4),
     gap: spacing(4),
-    backgroundColor: colors.neutral50,
-    flexGrow: 1,
+    borderRadius: radius.card,
+    backgroundColor: colors.brand950,
+    ...elevation.raised,
   },
-  recordCard: { alignItems: "stretch", gap: spacing(3) },
+  sectionCard: {
+    padding: spacing(4),
+    gap: spacing(4),
+    borderWidth: 1,
+    borderColor: colors.neutral200,
+    borderRadius: radius.card,
+    backgroundColor: colors.surface,
+    ...elevation.subtle,
+  },
+  stepHeader: { flexDirection: "row", alignItems: "flex-start", gap: spacing(3) },
+  stepBadge: {
+    minWidth: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.brand50,
+  },
+  stepBadgeDark: { backgroundColor: glass.onDark },
+  stepBadgeText: { ...typography.label, color: colors.brand800 },
+  stepBadgeDarkText: { ...typography.label, color: colors.accent600 },
+  stepCopy: { flex: 1, minWidth: 0 },
+  stepTitle: { ...typography.cardTitle, color: colors.neutral950 },
+  stepTitleLight: { ...typography.cardTitle, color: colors.surface },
+  stepHelp: { ...typography.body, color: colors.neutral600, marginTop: spacing(0.5) },
+  stepHelpLight: { ...typography.body, color: colors.neutral300, marginTop: spacing(0.5) },
+  recordingStatus: {
+    alignSelf: "center",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing(1.5),
+    paddingHorizontal: spacing(2.5),
+    paddingVertical: spacing(1),
+    borderRadius: radius.pill,
+    backgroundColor: glass.onDark,
+  },
+  recordingDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.neutral500,
+  },
+  recordingDotActive: { backgroundColor: colors.danger700 },
+  recordingStatusText: { ...typography.label, color: colors.neutral200 },
   timer: {
-    fontSize: 48,
-    lineHeight: 56,
+    fontSize: 52,
+    lineHeight: 58,
     fontWeight: "700",
-    color: colors.neutral950,
+    letterSpacing: -1.5,
+    color: colors.surface,
     textAlign: "center",
     fontVariant: ["tabular-nums"],
   },
-  recordState: { textAlign: "center", color: colors.accent600, fontWeight: "600" },
   promptChips: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -497,29 +786,29 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   promptChip: {
-    backgroundColor: colors.brand100,
-    borderRadius: 999,
-    paddingHorizontal: spacing(3),
-    paddingVertical: spacing(1.5),
+    borderWidth: 1,
+    borderColor: glass.border,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing(2.5),
+    paddingVertical: spacing(1.25),
+    backgroundColor: glass.onDark,
   },
-  promptChipText: { color: colors.brand700, fontSize: 14, lineHeight: 20 },
-  recordControls: { flexDirection: "row", gap: spacing(3) },
+  promptChipText: { ...typography.caption, color: colors.neutral200 },
+  controlRow: { flexDirection: "row", gap: spacing(2) },
   flexGrow: { flex: 1 },
-  noticeWarning: {
-    backgroundColor: colors.warning100,
-    borderRadius: radius.control,
-    padding: spacing(3),
+  localNote: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: spacing(1.5),
   },
-  noticeError: {
-    backgroundColor: colors.danger100,
-    borderRadius: radius.control,
-    padding: spacing(3),
-  },
-  photoRail: { gap: spacing(3), paddingVertical: spacing(2) },
-  photoWrap: { width: 112, gap: spacing(1) },
+  localNoteText: { ...typography.caption, color: colors.neutral500, flexShrink: 1 },
+  photoCount: { ...typography.label, color: colors.brand800 },
+  photoRail: { gap: spacing(3), paddingVertical: spacing(1) },
+  photoWrap: { width: 132, gap: spacing(1.5) },
   photoThumb: {
-    width: 112,
-    height: 112,
+    width: 132,
+    height: 116,
     borderRadius: radius.control,
     backgroundColor: colors.neutral200,
   },
@@ -527,30 +816,100 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: spacing(1),
     right: spacing(1),
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     backgroundColor: colors.neutral950,
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
   },
-  photoMeta: { fontSize: 12, lineHeight: 16, color: colors.neutral500 },
-  noteInput: {
-    minHeight: TOUCH_TARGET * 1.5,
+  photoMetaRow: { flexDirection: "row", alignItems: "center", gap: spacing(0.5) },
+  photoMeta: { ...typography.caption, color: colors.neutral500, flex: 1 },
+  photoEmpty: {
+    minHeight: 72,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing(3),
+    padding: spacing(3),
+    borderRadius: radius.control,
+    backgroundColor: colors.neutral50,
+  },
+  evidenceActions: { flexDirection: "row", gap: spacing(2) },
+  evidenceAction: {
+    flex: 1,
+    minHeight: 76,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing(1.5),
     borderWidth: 1,
     borderColor: colors.neutral200,
     borderRadius: radius.control,
+    backgroundColor: colors.surface,
+    overflow: "hidden",
+  },
+  evidenceActionPressed: { backgroundColor: colors.brand50 },
+  evidenceIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.brand50,
+  },
+  evidenceLabel: { ...typography.label, color: colors.brand900, textAlign: "center" },
+  detailsPanel: {
+    paddingHorizontal: spacing(3),
+    borderRadius: radius.control,
+    backgroundColor: colors.neutral50,
+  },
+  detailRow: {
+    minHeight: TOUCH_TARGET,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing(3),
+  },
+  detailValue: { ...typography.bodyStrong, color: colors.neutral950, flex: 1, textAlign: "right" },
+  detailDivider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.neutral200 },
+  inputLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing(2),
+    marginBottom: spacing(2),
+  },
+  noteInput: {
+    minHeight: 128,
+    borderWidth: 1,
+    borderColor: colors.neutral300,
+    borderRadius: radius.control,
     padding: spacing(3),
     fontSize: 16,
-    lineHeight: 22,
+    lineHeight: 23,
     color: colors.neutral950,
-    textAlignVertical: "top",
+    backgroundColor: colors.surface,
   },
-  confirmRow: {
+  actionDock: {
+    gap: spacing(1),
+    paddingHorizontal: layout.horizontal,
+    paddingTop: spacing(2),
+    paddingBottom: spacing(1),
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.neutral200,
+    backgroundColor: colors.surface,
+    ...elevation.floating,
+  },
+  saveLaterButton: {
+    minHeight: TOUCH_TARGET,
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
+    justifyContent: "center",
     gap: spacing(2),
-    marginTop: spacing(1),
+    borderRadius: radius.control,
+    overflow: "hidden",
   },
+  saveLaterPressed: { backgroundColor: colors.brand50 },
+  saveLaterDisabled: { opacity: 0.42 },
+  saveLaterText: { ...typography.bodyStrong, color: colors.brand800 },
 });

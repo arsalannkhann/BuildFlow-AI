@@ -11,9 +11,19 @@
       "android",
       "ios"
     ],
-    "backgroundColor": "#F9FAFB",
+    "backgroundColor": "#F7F8F6",
+    "androidStatusBar": {
+      "backgroundColor": "#0B2233",
+      "barStyle": "light-content",
+      "translucent": false
+    },
+    "androidNavigationBar": {
+      "backgroundColor": "#FFFFFF",
+      "barStyle": "dark-content"
+    },
     "android": {
       "package": "com.buildflow.mobile",
+      "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0B1F35"

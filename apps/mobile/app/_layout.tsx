@@ -9,11 +9,13 @@ import { I18nProvider, LANGUAGE_SETTING_KEY } from "../src/lib/i18n";
 import { SessionProvider } from "../src/state/session";
 import { ServicesProvider, bootServices, type AppServices } from "../src/state/services";
 import { SyncProvider } from "../src/state/sync";
-import { colors } from "../src/ui/theme";
+import { BrandLockup, PrimaryButton } from "../src/ui/components";
+import { colors, radius, spacing } from "../src/ui/theme";
 
 export default function RootLayout() {
   const [services, setServices] = useState<AppServices | null>(null);
   const [bootError, setBootError] = useState<string | null>(null);
+  const [bootAttempt, setBootAttempt] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -27,13 +29,30 @@ export default function RootLayout() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [bootAttempt]);
 
   if (bootError) {
     return (
       <View style={styles.boot}>
-        <Text style={styles.bootErrorTitle}>BuildFlow could not start</Text>
-        <Text style={styles.bootErrorDetail}>{bootError}</Text>
+        <StatusBar style="light" backgroundColor={colors.brand900} />
+        <BrandLockup light />
+        <View style={styles.bootErrorCard}>
+          <Text accessibilityRole="header" style={styles.bootErrorTitle}>
+            BuildFlow could not start
+          </Text>
+          <Text style={styles.bootErrorDetail}>
+            Your on-device workspace could not be opened. Your existing server records are not affected.
+          </Text>
+          {__DEV__ ? <Text style={styles.bootDebug}>{bootError}</Text> : null}
+          <PrimaryButton
+            label="Try again"
+            onPress={() => {
+              setBootError(null);
+              setServices(null);
+              setBootAttempt((attempt) => attempt + 1);
+            }}
+          />
+        </View>
       </View>
     );
   }
@@ -41,7 +60,10 @@ export default function RootLayout() {
   if (!services) {
     return (
       <View style={styles.boot}>
-        <ActivityIndicator size="large" color={colors.brand700} />
+        <StatusBar style="light" backgroundColor={colors.brand900} />
+        <BrandLockup light />
+        <ActivityIndicator size="large" color={colors.surface} />
+        <Text style={styles.bootLoading}>Opening your field workspace…</Text>
       </View>
     );
   }
@@ -62,12 +84,20 @@ export default function RootLayout() {
                 headerStyle: { backgroundColor: colors.brand900 },
                 headerTintColor: colors.surface,
                 headerTitleStyle: { fontWeight: "700" },
-                contentStyle: { backgroundColor: colors.neutral50 },
+                contentStyle: { backgroundColor: colors.paper },
               }}
             >
               <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
               <Stack.Screen name="sign-in" options={{ headerShown: false }} />
-              <Stack.Screen name="capture" options={{ presentation: "modal", headerShown: false }} />
+              <Stack.Screen
+                name="capture"
+                options={{
+                  presentation: "modal",
+                  animation: "slide_from_bottom",
+                  gestureEnabled: false,
+                  headerShown: false,
+                }}
+              />
             </Stack>
           </SessionProvider>
         </SyncProvider>
@@ -81,10 +111,29 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.neutral50,
-    padding: 24,
-    gap: 12,
+    backgroundColor: colors.brand900,
+    padding: spacing(6),
+    gap: spacing(6),
   },
-  bootErrorTitle: { fontSize: 18, fontWeight: "600", color: colors.neutral950 },
-  bootErrorDetail: { fontSize: 14, color: colors.neutral700, textAlign: "center" },
+  bootLoading: {
+    color: "rgba(255,255,255,0.72)",
+    fontSize: 14,
+    lineHeight: 21,
+  },
+  bootErrorCard: {
+    width: "100%",
+    maxWidth: 460,
+    padding: spacing(5),
+    borderRadius: radius.card,
+    backgroundColor: colors.surface,
+    gap: spacing(3),
+  },
+  bootErrorTitle: { fontSize: 22, lineHeight: 28, fontWeight: "700", color: colors.brand900 },
+  bootErrorDetail: { fontSize: 15, lineHeight: 23, color: colors.neutral700 },
+  bootDebug: {
+    color: colors.danger700,
+    fontSize: 12,
+    lineHeight: 17,
+    fontFamily: "monospace",
+  },
 });
