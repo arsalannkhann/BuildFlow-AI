@@ -11,7 +11,7 @@ export default async function ForgotPasswordPage({
       <section className="login-brand-panel">
         <Link href="/" className="brand-lockup brand-lockup--light" aria-label="BuildFlow home">
           <span className="brand-mark brand-mark--light" aria-hidden="true"><span /><span /><span /></span>
-          <span><strong>BuildFlow</strong><small>Site reports, simplified</small></span>
+          <span><strong>BuildFlow</strong><small>Construction operations, clarified</small></span>
         </Link>
         <div>
           <p className="login-kicker">ACCOUNT RECOVERY</p>

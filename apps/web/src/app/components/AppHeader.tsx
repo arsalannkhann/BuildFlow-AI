@@ -129,7 +129,7 @@ export async function AppHeader({
           </span>
           <span>
             <strong>BuildFlow</strong>
-            <small>Site reports, simplified</small>
+            <small>Construction operations, clarified</small>
           </span>
         </Link>
 

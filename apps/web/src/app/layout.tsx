@@ -8,10 +8,10 @@ export const dynamic = "force-dynamic";
 
 export const metadata = {
   title: {
-    default: "BuildFlow",
+    default: "BuildFlow — Construction operations from site to office",
     template: "%s · BuildFlow",
   },
-  description: "Turn site voice notes and photos into trusted daily progress reports.",
+  description: "Turn field voice notes, photos and project documents into structured, human-approved construction records.",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

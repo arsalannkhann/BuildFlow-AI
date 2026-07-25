@@ -21,17 +21,22 @@ export default async function LoginPage({ searchParams }: { searchParams?: Promi
           </span>
           <span>
             <strong>BuildFlow</strong>
-            <small>Site reports, simplified</small>
+            <small>Construction operations, clarified</small>
           </span>
         </Link>
         <div>
-          <p className="login-kicker">{demoQuickLogin ? "WORKING PRODUCT DEMO" : "CONSTRUCTION OPERATIONS"}</p>
-          <h1>{demoQuickLogin ? <>One project.<br />Two clear workflows.</> : <>Your projects.<br />One trusted record.</>}</h1>
+          <p className="login-kicker">{demoQuickLogin ? "WORKING PRODUCT DEMO" : "YOUR OPERATING WORKSPACE"}</p>
+          <h1>{demoQuickLogin ? <>One project.<br />Three clear views.</> : <>From site evidence.<br />To trusted record.</>}</h1>
           <p>
             {demoQuickLogin
               ? "Experience BuildFlow as the engineer creating an update or the manager turning that update into an issued report."
-              : "Capture field evidence, review project records and act on exceptions from one secure workspace."}
+              : "Capture field evidence, review project records and act on exceptions from one connected workspace."}
           </p>
+          <ul className="login-brand-points" aria-label="BuildFlow product principles">
+            <li><span aria-hidden="true">✓</span> Evidence linked</li>
+            <li><span aria-hidden="true">✓</span> Human approved</li>
+            <li><span aria-hidden="true">✓</span> Access scoped</li>
+          </ul>
         </div>
         {demoQuickLogin ? <div className="login-project-card">
           <span className="project-pulse" aria-hidden="true" />
