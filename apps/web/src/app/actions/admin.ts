@@ -23,9 +23,63 @@ import { createOrganizationExportRequest } from "@buildflow/lifecycle/export";
 import {
   approveOrganizationDeletion, cancelOrganizationDeletion, requestOrganizationDeletion,
 } from "@buildflow/lifecycle/deletion";
+import { sendInvitationEmail } from "@buildflow/notify/invitation";
+import type { Role } from "@buildflow/domain/tenancy";
 
 const str = (fd: FormData, key: string): string => String(fd.get(key) ?? "").trim();
 const opt = (fd: FormData, key: string): string | null => str(fd, key) || null;
+
+type InvitationDelivery = "sent" | "failed" | "not-requested";
+
+function invitationBaseUrl(requestHeaders: Pick<Headers, "get">): string {
+  const configured = process.env.APP_BASE_URL?.trim();
+  if (!configured && process.env.NODE_ENV === "production") {
+    throw new Error("APP_BASE_URL is required to email invitation links in production");
+  }
+  const forwardedProto = requestHeaders.get("x-forwarded-proto")?.split(",")[0]?.trim();
+  const forwardedHost = requestHeaders.get("x-forwarded-host")?.split(",")[0]?.trim();
+  const host = forwardedHost ?? requestHeaders.get("host")?.trim() ?? "localhost:3000";
+  const candidate = configured || `${forwardedProto === "https" ? "https" : "http"}://${host}`;
+  const url = new URL(candidate);
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new Error("APP_BASE_URL must use http or https");
+  }
+  if (url.username || url.password) throw new Error("APP_BASE_URL must not include credentials");
+  return url.toString().replace(/\/+$/, "");
+}
+
+async function deliverInvitation(input: {
+  email: string | null;
+  token: string;
+  expiresAt: Date;
+  organizationName: string;
+  projectName: string | null;
+  role: Role;
+}): Promise<InvitationDelivery> {
+  if (!input.email) return "not-requested";
+  try {
+    const requestHeaders = await headers();
+    const inviteUrl = `${invitationBaseUrl(requestHeaders)}/invite/${encodeURIComponent(input.token)}`;
+    await sendInvitationEmail({
+      to: input.email,
+      inviteUrl,
+      organizationName: input.organizationName,
+      projectName: input.projectName,
+      role: input.role,
+      expiresAt: input.expiresAt,
+    });
+    return "sent";
+  } catch {
+    // The valid link is still shown once in the redirect UI. Never log its token or recipient.
+    console.error("invitation email dispatch failed");
+    return "failed";
+  }
+}
+
+function invitationRedirect(back: string, token: string, delivery: InvitationDelivery): never {
+  const query = new URLSearchParams({ invited: token, delivery });
+  redirect(`${back}?${query}`);
+}
 
 export async function createProjectAction(formData: FormData): Promise<void> {
   const db = await getDb();
@@ -62,16 +116,19 @@ export async function updateProjectAction(formData: FormData): Promise<void> {
 export async function inviteMemberAction(formData: FormData): Promise<void> {
   const db = await getDb();
   const projectId = opt(formData, "projectId");
+  const email = opt(formData, "email");
+  const role = parseRole(str(formData, "role"));
   const ctx = await currentContext();
   const scoped = projectId ? { ...ctx, projectId } : ctx;
   const invite = await withTenant(db, scoped, (tx) => inviteMember(tx, scoped, {
-    email: opt(formData, "email") ?? undefined,
+    email: email ?? undefined,
     mobile: opt(formData, "mobile") ?? undefined,
-    role: parseRole(str(formData, "role")),
+    role,
     projectId,
   }));
+  const delivery = await deliverInvitation({ email, role, ...invite });
   const back = projectId ? `/projects/${projectId}/admin` : "/organization";
-  redirect(`${back}?invited=${encodeURIComponent(invite.token)}`);
+  invitationRedirect(back, invite.token, delivery);
 }
 
 export async function revokeInvitationAction(formData: FormData): Promise<void> {
@@ -249,10 +306,12 @@ export async function createOnboardingProjectAction(formData: FormData): Promise
 
 export async function inviteOnboardingMemberAction(formData: FormData): Promise<void> {
   const db = await getDb();
+  const email = opt(formData, "email");
+  const role = parseRole(str(formData, "role"));
   const ctx = await currentContext();
   const invite = await withTenant(db, ctx, (tx) => inviteMember(tx, ctx, {
-    email: opt(formData, "email") ?? undefined,
-    role: parseRole(str(formData, "role")), projectId: null,
+    email: email ?? undefined, role, projectId: null,
   }));
-  redirect(`/onboarding?invited=${encodeURIComponent(invite.token)}`);
+  const delivery = await deliverInvitation({ email, role, ...invite });
+  invitationRedirect("/onboarding", invite.token, delivery);
 }

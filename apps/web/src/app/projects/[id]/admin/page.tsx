@@ -11,7 +11,7 @@ import {
   addActivityAction, addLocationAction, changeRoleAction, importCsvAction,
   inviteMemberAction, removeMemberAction, revokeInvitationAction, updateProjectAction,
 } from "@/app/actions/admin";
-import { InviteLinkNotice } from "@/app/components/InviteLinkNotice";
+import { InviteLinkNotice, type InvitationDelivery } from "@/app/components/InviteLinkNotice";
 import { LOCATION_KINDS } from "@/core/admin-core";
 
 export default async function ProjectAdminPage({
@@ -35,6 +35,9 @@ export default async function ProjectAdminPage({
   ]));
   const locationName = new Map(locationRows.map((l) => [l.id, l.name]));
   const invitedToken = typeof query.invited === "string" ? query.invited : null;
+  const invitationDelivery = query.delivery === "sent" || query.delivery === "failed"
+    ? query.delivery as InvitationDelivery
+    : "not-requested";
 
   return (
     <>
@@ -48,7 +51,7 @@ export default async function ProjectAdminPage({
           </div>
         </section>
 
-        {invitedToken && <InviteLinkNotice token={invitedToken} />}
+        {invitedToken && <InviteLinkNotice token={invitedToken} delivery={invitationDelivery} />}
 
         {canManage && (
           <section className="surface-card admin-section" aria-labelledby="ps-settings">

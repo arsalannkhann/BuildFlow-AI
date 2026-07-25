@@ -7,7 +7,7 @@ import { listInvitations } from "@buildflow/db/queries/invitations";
 import { listAuditEvents } from "@buildflow/db/queries/audit";
 import { ROLES } from "@buildflow/domain/tenancy";
 import { inviteMemberAction, revokeInvitationAction } from "@/app/actions/admin";
-import { InviteLinkNotice } from "@/app/components/InviteLinkNotice";
+import { InviteLinkNotice, type InvitationDelivery } from "@/app/components/InviteLinkNotice";
 import { ResetLinkNotice } from "@/app/components/ResetLinkNotice";
 import { generateMemberResetLinkAction } from "@/app/actions/auth";
 import Link from "next/link";
@@ -49,6 +49,9 @@ export default async function OrganizationPage({
     return { members, commercial, exports, invitations, auditRows };
   });
   const invitedToken = typeof params.invited === "string" ? params.invited : null;
+  const invitationDelivery = params.delivery === "sent" || params.delivery === "failed"
+    ? params.delivery as InvitationDelivery
+    : "not-requested";
   const resetToken = typeof params.resetToken === "string" ? params.resetToken : null;
 
   return (
@@ -67,7 +70,7 @@ export default async function OrganizationPage({
           </div>
         </section>
 
-        {invitedToken && <InviteLinkNotice token={invitedToken} />}
+        {invitedToken && <InviteLinkNotice token={invitedToken} delivery={invitationDelivery} />}
         {resetToken && <ResetLinkNotice token={resetToken} />}
 
         <section className="surface-card admin-section" aria-labelledby="org-plan">

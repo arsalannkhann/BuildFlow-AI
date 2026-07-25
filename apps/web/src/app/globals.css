@@ -2960,6 +2960,7 @@ textarea::placeholder { color: var(--neutral-500); opacity: 1; }
 .admin-list__actions { display: flex; gap: 8px; }
 .admin-empty { color: var(--neutral-500, #6b7280); padding: 8px 0; }
 .admin-invite-notice { border-left: 4px solid var(--success-700, #16794b); }
+.admin-invite-notice--warning { border-left-color: var(--warning-700, #8a5f00); }
 .admin-invite-notice__link { display: block; padding: 12px; background: var(--neutral-50, #f9fafb); border-radius: 8px; word-break: break-all; font-size: 14px; }
 .invite-shell { max-width: 640px; margin: 48px auto; }
 

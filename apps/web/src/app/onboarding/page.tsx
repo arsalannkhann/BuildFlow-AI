@@ -7,7 +7,7 @@ import { getOrganizationSettings } from "@buildflow/db/queries/organization";
 import { ROLES } from "@buildflow/domain/tenancy";
 import { currentContext } from "@/app/session";
 import { AppHeader } from "@/app/components/AppHeader";
-import { InviteLinkNotice } from "@/app/components/InviteLinkNotice";
+import { InviteLinkNotice, type InvitationDelivery } from "@/app/components/InviteLinkNotice";
 import { createOnboardingProjectAction, inviteOnboardingMemberAction } from "@/app/actions/admin";
 
 export default async function OnboardingPage({
@@ -22,6 +22,9 @@ export default async function OnboardingPage({
   const canManage = ctx.capabilities.includes("org.manage");
   const canInvite = ctx.capabilities.includes("org.members.manage");
   const token = typeof params.invited === "string" ? params.invited : null;
+  const invitationDelivery = params.delivery === "sent" || params.delivery === "failed"
+    ? params.delivery as InvitationDelivery
+    : "not-requested";
   const ready = projects.length > 0 && members.length > 1;
 
   return <>
@@ -32,7 +35,7 @@ export default async function OnboardingPage({
           <p className="page-lead">Your organization is provisioned. Add a project, bring in one teammate, then import the site structure when you are ready.</p></div>
         {ready ? <Link href="/projects" className="primary-button">Open projects</Link> : null}
       </section>
-      {token ? <InviteLinkNotice token={token} /> : null}
+      {token ? <InviteLinkNotice token={token} delivery={invitationDelivery} /> : null}
 
       <ol className="onboarding-steps" aria-label="Setup progress">
         <li className="onboarding-step onboarding-step--complete"><span>Done</span><strong>Organization</strong><small>{organization.name}</small></li>

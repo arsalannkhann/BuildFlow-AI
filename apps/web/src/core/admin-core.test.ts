@@ -30,6 +30,8 @@ test("invitation round-trip: invite -> accept creates user+credential+membership
   const invite = await inviteMember(db, owner, {
     email: "qs@example.com", role: "quantity_surveyor", projectId: SEED.projectId,
   });
+  expect(invite.organizationName).toBe("Demo Contractor Pvt Ltd");
+  expect(invite.projectName).toBe("Sector 62 Tower A");
   const accepted = await acceptInvitationAndCreateAccount(db, {
     token: invite.token, displayName: "QS Person", password: "strong-password-1",
   });

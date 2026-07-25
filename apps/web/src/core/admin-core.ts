@@ -45,9 +45,14 @@ export async function updateProjectSettings(
 
 export async function inviteMember(db: AppDb, ctx: TenantContext, input: {
   email?: string; mobile?: string; role: Role; projectId?: string | null;
-}): Promise<{ token: string; expiresAt: Date }> {
+}): Promise<{
+  token: string;
+  expiresAt: Date;
+  organizationName: string;
+  projectName: string | null;
+}> {
   assertCan(ctx, input.projectId ? "project.members.manage" : "org.members.manage");
-  if (input.projectId) await getProject(db, ctx, input.projectId); // tenant check
+  const project = input.projectId ? await getProject(db, ctx, input.projectId) : null; // tenant check
   const [organization, usage] = await Promise.all([
     getOrganizationSettings(db, ctx.organizationId), organizationUsage(db, ctx.organizationId),
   ]);
@@ -57,7 +62,12 @@ export async function inviteMember(db: AppDb, ctx: TenantContext, input: {
     action: "member.invited", subjectRef: invitation.id,
     metadata: { role: input.role, projectId: input.projectId ?? null },
   });
-  return { token: invitation.token, expiresAt: invitation.expiresAt };
+  return {
+    token: invitation.token,
+    expiresAt: invitation.expiresAt,
+    organizationName: organization.name,
+    projectName: project?.name ?? null,
+  };
 }
 
 export async function revokeMemberInvitation(

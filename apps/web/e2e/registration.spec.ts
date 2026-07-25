@@ -22,6 +22,7 @@ test("owner creates an organization, first project, and teammate invitation", as
   await expect(page).toHaveURL(/project=created/, { timeout: 30_000 });
   await page.getByLabel("Email").fill(`engineer+${suffix}@example.com`);
   await page.getByRole("button", { name: "Create invitation" }).click();
-  await expect(page).toHaveURL(/invited=/, { timeout: 30_000 });
+  await expect(page).toHaveURL(/invited=.*delivery=sent/, { timeout: 30_000 });
   await expect(page.getByRole("heading", { name: "Invitation created" })).toBeVisible();
+  await expect(page.getByText(/secure join link was emailed automatically/i)).toBeVisible();
 });
