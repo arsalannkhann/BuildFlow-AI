@@ -899,6 +899,53 @@ export const deletionReceipts = pgTable("deletion_receipt", {
 });
 
 
+
+// --- Entity resolution: turning site speech into the project's own vocabulary ---
+
+/**
+ * Alias dictionary mapping what people actually say to a canonical term. Seeded with
+ * English/Hindi/Hinglish construction vocabulary and GROWN from reviewer confirmations:
+ * once a manager confirms "mistri" means Mason on their project, the mapping is learned
+ * (project-scoped first, org-scoped fallback) so the next report resolves without asking.
+ * Never a substitute for review — it raises confidence, it does not bypass approval.
+ */
+export const termAliases = pgTable("term_alias", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull(),
+  projectId: text("project_id"), // null = organization-wide
+  kind: text("kind").notNull(), // trade | material | unit | activity | location | equipment
+  alias: text("alias").notNull(), // normalized lower-case form as spoken
+  canonicalValue: text("canonical_value").notNull(), // e.g. "mason", "m3"
+  canonicalId: text("canonical_id"), // reference row id when the target is a record
+  source: text("source").notNull().default("seed"), // seed | learned | manual
+  confirmedBy: text("confirmed_by"),
+  createdAt: ts(),
+});
+
+/**
+ * Append-only record of how a free-text phrase in a report was resolved to a project
+ * record, including the method and score. This is the audit trail behind every
+ * downstream effect (schedule progress, stock, productivity) — "we read 'sariya' as
+ * TMT steel by learned alias, score 1.0, confirmed by the PM".
+ */
+export const reportEntityLinks = pgTable("report_entity_link", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull(),
+  projectId: text("project_id").notNull(),
+  reportId: text("report_id").notNull(),
+  revisionId: text("revision_id"),
+  fieldPath: text("field_path").notNull(),
+  entityKind: text("entity_kind").notNull(), // location | activity | material | schedule_item | contractor | equipment | unit | trade
+  entityId: text("entity_id"), // null when the canonical value is not a row (unit/trade)
+  canonicalValue: text("canonical_value"),
+  rawText: text("raw_text").notNull(),
+  method: text("method").notNull(), // alias | exact | fuzzy | semantic | llm | manual | unresolved
+  score: numeric("score", { precision: 5, scale: 4 }),
+  confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
+  confirmedBy: text("confirmed_by"),
+  createdAt: ts(),
+});
+
 export const dailyReports = pgTable("daily_report", {
   id: text("id").primaryKey(),
   organizationId: text("organization_id").notNull(),
@@ -927,6 +974,9 @@ export const reportRevisions = pgTable("report_revision", {
   summaryInternal: text("summary_internal"),
   summaryClientSafe: text("summary_client_safe"),
   transcript: jsonb("transcript"),
+  // The original account is never replaced (design.md §19): a normalized/translated
+  // rendering is stored alongside it for readers who need one.
+  transcriptNormalized: jsonb("transcript_normalized"),
   createdBy: text("created_by").notNull(),
   isAiGenerated: boolean("is_ai_generated").notNull().default(false),
   createdAt: ts(),
@@ -947,6 +997,9 @@ export const attachments = pgTable("attachment", {
   // once the object content is stored and checksum-verified (null = still expected).
   clientAttachmentId: text("client_attachment_id"),
   uploadedAt: timestamp("uploaded_at", { withTimezone: true }),
+  // Media quality signals: a 6-second recording is probably an incomplete update, and the
+  // pipeline should say so rather than silently producing a thin report.
+  durationMs: integer("duration_ms"),
   createdAt: ts(),
 });
 
@@ -1025,7 +1078,7 @@ export const auditEvents = pgTable("audit_event", {
 
 export const schema = {
   organizations, users, authCredentials, passwordResets, sessions, projects, memberships, jobs, rateLimitBuckets,
-  locations, activities, invitations, clientLinks,
+  locations, activities, invitations, clientLinks, termAliases, reportEntityLinks,
   scheduleItems, scheduleDependencies, progressUpdates, blockers, rfis, rfiResponses,
   documents, documentRevisions, reportActivityLinks,
   materials, suppliers, projectSuppliers, materialReceipts, materialReceiptLines, stockTransactions,

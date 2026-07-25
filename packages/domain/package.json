@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./resolve": "./src/resolve/index.ts",
     "./*": "./src/*.ts"
   },
   "scripts": {
