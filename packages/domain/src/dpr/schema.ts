@@ -1,11 +1,26 @@
 import { z } from "zod";
 
+// Stays "dpr.v1": `quote` was added as an OPTIONAL field, so every historical revision
+// still validates. Bumping the literal would make previously issued records unreadable.
+// The behavioural change is tracked by the prompt version instead (rules.md §11).
 export const DPR_SCHEMA_VERSION = "dpr.v1" as const;
 
 export const confidenceBand = z.enum(["Supported", "Check", "Missing"]);
 export type ConfidenceBand = z.infer<typeof confidenceBand>;
 
 export const sourceRef = z.object({
+  /**
+   * Verbatim words from the transcript that support the claim. Unlike `transcript_span`,
+   * a quote is SELF-VERIFYING: the server checks it really occurs in the transcript and
+   * drops it when it does not (see validate.ts). Prefer this as the evidence anchor.
+   */
+  quote: z.string().optional(),
+  /**
+   * Approximate audio offsets. NOTE: when the transcription provider is a multimodal LLM
+   * these are model-generated numbers, not measurements from the waveform — treat them as
+   * a navigation hint, never as proof. Real offsets require an ASR provider that emits
+   * word timings.
+   */
   transcript_span: z.object({ startMs: z.number(), endMs: z.number() }).optional(),
   attachment_id: z.string().optional(),
 });

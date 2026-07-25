@@ -4,7 +4,11 @@ import type { TenantContext } from "@buildflow/domain/tenancy";
 import { assertCan } from "@buildflow/domain/tenancy";
 import { assertTransition, type ReportStatus } from "@buildflow/domain/report/state";
 import { newId } from "@buildflow/domain/ids";
-import { getReport, setReportStatus } from "@buildflow/db/queries/reports";
+import { ensureDprNumber, getReport, setReportStatus } from "@buildflow/db/queries/reports";
+import { getProject } from "@buildflow/db/queries/projects";
+import { getUser } from "@buildflow/db/queries/notifications";
+import { organizations } from "@buildflow/db/schema";
+import { eq } from "drizzle-orm";
 import { listAttachments } from "@buildflow/db/queries/attachments";
 import { latestRevision } from "@buildflow/db/queries/revisions";
 import { recordDecision } from "@buildflow/db/queries/review";
@@ -63,11 +67,29 @@ export async function issueReport(db: AppDb, storage: StoragePort, ctx: TenantCo
     }
   }
 
+  // Document identity and accountable names: a signed DPR cites people and a project,
+  // not opaque ids. Lookups are tenant-scoped and failure-tolerant — a missing lookup
+  // must not block issuance of an approved record.
+  const dprNumber = await ensureDprNumber(db, ctx, reportId);
+  const project = await getProject(db, ctx, report.projectId).catch(() => null);
+  const [organization] = await db.select().from(organizations)
+    .where(eq(organizations.id, ctx.organizationId));
+  const submitter = await getUser(db, ctx, report.createdBy).catch(() => null);
+  const approver = await getUser(db, ctx, ctx.userId).catch(() => null);
+
   const pdf = await renderDprPdf({
     documentId, version, reportDate: report.reportDate,
     data: rev.structuredData as DprStructuredData,
     summaryClientSafe: rev.summaryClientSafe ?? "", issuedBy: ctx.userId,
     photos,
+    dprNumber,
+    organizationName: organization?.name ?? null,
+    projectName: project?.name ?? null,
+    clientName: project?.clientName ?? null,
+    siteAddress: project?.address ?? null,
+    submittedBy: submitter?.displayName ?? null,
+    approvedBy: approver?.displayName ?? null,
+    approvedAt: new Date().toISOString().slice(0, 16).replace("T", " "),
   });
   const objectKey = `org/${ctx.organizationId}/report/${reportId}/issued/${documentId}.pdf`;
   await storage.put(objectKey, pdf, "application/pdf");

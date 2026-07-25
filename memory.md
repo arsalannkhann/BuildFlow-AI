@@ -172,6 +172,45 @@ The source roadmap discusses RERA, DPCC Dust Portal, GRAP, Measurement Books, Ta
 
 ## 14. Decision log
 
+### 2026-07-26 — Verifiable citations + DPR document rebuild (Tier 1)
+
+**Voice model of record:** transcription is `gemini-2.5-flash` on Vertex AI with audio passed
+as inline base64 — NOT Google Speech-to-Text. Consequence: `transcript_span` start/end
+offsets are model-generated tokens, not waveform measurements, so they are a navigation hint
+only. Real word timings need an ASR provider (Chirp 2 candidate; verify `asia-south1`
+availability and Hinglish quality against a benchmark set before switching).
+
+**What landed:**
+- `sourceRef.quote` (optional, so `dpr.v1` stays readable for every historical revision;
+  the behavioural change is carried by prompt version `dpr-extraction.v2`).
+- `verifyQuoteAnchors()` checks each quote really occurs in the transcript
+  (whitespace/case/smart-punctuation tolerant, ≥3 chars). A fabricated or unverifiable
+  citation is REMOVED and its item drops `Supported → Check`; the claim itself survives.
+- Review UI shows "Cited words from the recording", or an explicit warning when nothing
+  verifiable supports an item. `equipment` and `safety_quality` are now reviewable at all.
+- Issued PDF rebuilt (`dpr-pdf.v3`): renders `weather_site_condition`, `safety_quality` and
+  `equipment` — all three were extracted, reviewed, then silently DROPPED by v2 — plus
+  quantity/labour/material/equipment/blocker tables with repeating headers, labour total,
+  per-project `DPR No.` serial (migration 0015, unique per project), project/client/site
+  identity, submitted-by / approved-by / client-signature block, Check-flag markers, page
+  numbering, and a SUPERSEDED banner.
+- Demo seed now stores a transcript and cites it, so demo data demonstrates evidence-linked
+  review; `cite()` throws at seed time if a citation is not in its transcript.
+
+**Known pre-existing failure (NOT from this change):** `e2e/dpr-flow` fails at
+`AWAITING_REVIEW` because the inline job drain (`JOBS_MODE=inline`) leases nothing inside
+the Next dev server, so a submitted report stays `PROCESSING`. Verified by stashing this
+work and reproducing on clean HEAD. The job runner itself is correct (unit tests pass, and a
+standalone process drains the same queued job successfully). Production is unaffected: it
+runs `JOBS_MODE=worker` with a dedicated worker container. Root cause still open — suspect
+PGlite single-connection interaction with `FOR UPDATE SKIP LOCKED`. Fix before relying on
+inline mode anywhere.
+
+**Local dev footgun found:** running a `tsx` script against `.pglite` while `pnpm dev` is
+running corrupts the data directory (two PGlite processes, one dir). Recover with
+`rm -rf .pglite && pnpm seed:demo`.
+
+
 ### 2026-07-19 — Phase F landed as an engineering release candidate
 
 **Product readiness:** opt-in, rate-limited organization registration atomically creates the

@@ -911,6 +911,9 @@ export const dailyReports = pgTable("daily_report", {
   // Mobile offline sync: the device-generated report id makes resubmission idempotent
   // (unique per org+creator, enforced by partial unique index in migration 0003).
   clientReportId: text("client_report_id"),
+  // Per-project sequential number assigned at first issue ("DPR No. 142") — how sites
+  // reference a report in correspondence and claims. Unique per project (migration 0013).
+  dprNumber: integer("dpr_number"),
   createdAt: ts(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });

@@ -9,21 +9,78 @@ export const DEMO_SECOND_PROJECT_ID = "demo-dwarka-logistics";
 
 const supported = { source_refs: [], confidence_band: "Supported" as const };
 
+/**
+ * A demo report must demonstrate the product's core promise: every extracted claim is
+ * anchored to words the engineer actually said. The transcript below is the source of
+ * truth for the citations in reportData(), and `cite()` copies substrings out of it so the
+ * demo data passes the same server-side quote verification real extractions face.
+ */
+function reportTranscript(day: number, projectName: string): string {
+  const workLine = day % 2 === 0
+    ? `Today we finished slab reinforcement and shuttering on Tower A level 8, about ${18 + day} square meters`
+    : `Today we did blockwork and service coordination in the ground floor services zone, about ${18 + day} square meters`;
+  const labourLine = day % 2 === 0
+    ? `We had ${16 + day} bar benders on site`
+    : `We had ${16 + day} masons on site`;
+  const materialLine = day % 2 === 0 ? "TMT steel was used today" : "AAC blocks were used today";
+  const blockerLine = day === 5
+    ? " The MEP sleeve drawing clarification is still pending with the design coordinator."
+    : "";
+  return `${workLine}. ${labourLine}. ${materialLine}. Tower crane was in use. ` +
+    `Pre-start briefing completed; access routes checked. Warm, dry working conditions.` +
+    `${blockerLine} Tomorrow we continue the planned ${projectName} workfront.`;
+}
+
+/** Cites verbatim words; throws during seeding if the quote is not really in the transcript. */
+function cite(transcript: string, quote: string) {
+  if (!transcript.toLowerCase().includes(quote.toLowerCase())) {
+    throw new Error(`Demo seed citation is not in its transcript: ${quote}`);
+  }
+  return { source_refs: [{ quote }], confidence_band: "Supported" as const };
+}
+
 function reportData(day: number, projectName: string) {
+  const transcript = reportTranscript(day, projectName);
   return {
     schema_version: "dpr.v1" as const,
     work_items: [{
       description: day % 2 === 0 ? "Slab reinforcement and shuttering" : "Blockwork and service coordination",
       location: day % 2 === 0 ? "Tower A, Level 8" : "Ground floor services zone",
-      activity: "Civil works", quantity: { value: String(18 + day), unit: "sqm" }, ...supported,
+      activity: "Civil works", quantity: { value: String(18 + day), unit: "sqm" },
+      ...cite(transcript, day % 2 === 0
+        ? "slab reinforcement and shuttering on Tower A level 8"
+        : "blockwork and service coordination in the ground floor services zone"),
     }],
-    labour: [{ trade: day % 2 === 0 ? "Bar benders" : "Masons", count: 16 + day, ...supported }],
-    materials: [{ name: day % 2 === 0 ? "TMT steel" : "AAC blocks", status: "used" as const, quantity: null, unit: day % 2 === 0 ? "kg" : "nos", ...supported }],
-    equipment: [{ name: "Tower crane", status: "used" as const, ...supported }],
-    safety_quality: [{ note: "Pre-start briefing completed; access routes checked.", ...supported }],
-    blockers: day === 5 ? [{ description: "MEP sleeve drawing clarification pending", cause: "Revision under review", owner: "Design coordinator", expected_resolution: "2026-07-18", ...supported }] : [],
-    weather_site_condition: { value: "Warm, dry working conditions", ...supported },
-    tomorrow_plan: [{ item: `Continue planned ${projectName} workfront`, ...supported }],
+    labour: [{
+      trade: day % 2 === 0 ? "Bar benders" : "Masons", count: 16 + day,
+      ...cite(transcript, day % 2 === 0 ? `${16 + day} bar benders on site` : `${16 + day} masons on site`),
+    }],
+    materials: [{
+      name: day % 2 === 0 ? "TMT steel" : "AAC blocks", status: "used" as const,
+      quantity: null, unit: day % 2 === 0 ? "kg" : "nos",
+      ...cite(transcript, day % 2 === 0 ? "TMT steel was used today" : "AAC blocks were used today"),
+    }],
+    equipment: [{
+      name: "Tower crane", status: "used" as const,
+      ...cite(transcript, "Tower crane was in use"),
+    }],
+    safety_quality: [{
+      note: "Pre-start briefing completed; access routes checked.",
+      ...cite(transcript, "Pre-start briefing completed; access routes checked"),
+    }],
+    blockers: day === 5 ? [{
+      description: "MEP sleeve drawing clarification pending", cause: "Revision under review",
+      owner: "Design coordinator", expected_resolution: "2026-07-18",
+      ...cite(transcript, "MEP sleeve drawing clarification is still pending"),
+    }] : [],
+    weather_site_condition: {
+      value: "Warm, dry working conditions",
+      ...cite(transcript, "Warm, dry working conditions"),
+    },
+    tomorrow_plan: [{
+      item: `Continue planned ${projectName} workfront`,
+      ...cite(transcript, `continue the planned ${projectName} workfront`),
+    }],
   };
 }
 
@@ -52,6 +109,7 @@ export async function seedDemo(db: AppDb): Promise<void> {
       await db.insert(reportRevisions).values({
         id: revisionId, organizationId: SEED.orgId, reportId, revisionNumber: 1,
         structuredData: reportData(day, project.name),
+        transcript: { text: reportTranscript(day, project.name), language: "en", segments: [] },
         summaryInternal: `Synthetic demo update for ${project.name} on ${date}.`,
         summaryClientSafe: `Planned site activities progressed at ${project.name}.`,
         createdBy: SEED.manager.id, isAiGenerated: true,

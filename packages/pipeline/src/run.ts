@@ -43,7 +43,7 @@ export async function runProcessing(db: AppDb, ctx: TenantContext, reportId: str
 
     // Stage: deterministic validation
     failedStage = "validate";
-    const { data } = runDeterministicValidations(extracted);
+    const { data } = runDeterministicValidations(extracted, transcript.text);
     await recordStage(db, runId, "validate", "succeeded", 0);
 
     // Stage: summaries

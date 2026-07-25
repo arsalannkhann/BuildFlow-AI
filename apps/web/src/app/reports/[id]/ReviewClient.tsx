@@ -176,6 +176,29 @@ export function ReviewClient(props: {
                 </span>
                 <em>{selectedRow.refs.length} source {selectedRow.refs.length === 1 ? "reference" : "references"}</em>
               </div>
+              {(() => {
+                // Only verified quotes survive extraction (fabricated citations are stripped
+                // server-side), so anything shown here really occurs in the transcript.
+                const quotes = selectedRow.refs
+                  .map((ref) => ref.quote)
+                  .filter((quote): quote is string => Boolean(quote));
+                if (quotes.length > 0) {
+                  return (
+                    <div className="cited-words">
+                      <small>CITED WORDS FROM THE RECORDING</small>
+                      {quotes.map((quote, index) => (
+                        <blockquote key={index}>&ldquo;{quote}&rdquo;</blockquote>
+                      ))}
+                    </div>
+                  );
+                }
+                return (
+                  <p className="cited-words cited-words--none">
+                    No verified words from the transcript support this item. Confirm it against
+                    the recording before approving.
+                  </p>
+                );
+              })()}
               {props.status === "AWAITING_REVIEW" && props.canReview && (
                 <FieldDecisionPanel reportId={props.reportId} row={selectedRow} />
               )}

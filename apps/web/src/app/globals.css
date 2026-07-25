@@ -5696,3 +5696,31 @@ body {
     transform: none;
   }
 }
+
+/* Verified transcript citations in the review evidence panel */
+.cited-words { margin-top: 12px; }
+.cited-words > small {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--neutral-500, #6b7280);
+  margin-bottom: 6px;
+}
+.cited-words blockquote {
+  margin: 0 0 6px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--brand-100, #dceaf2);
+  color: var(--brand-900, #102a43);
+  font-size: 14px;
+  line-height: 20px;
+}
+.cited-words--none {
+  font-size: 13px;
+  line-height: 19px;
+  color: var(--warning-700, #8a5f00);
+  background: var(--warning-100, #fff2c6);
+  padding: 8px 12px;
+  border-radius: 8px;
+}

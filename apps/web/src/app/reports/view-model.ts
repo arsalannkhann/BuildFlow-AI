@@ -15,6 +15,10 @@ export function buildFieldRows(d: DprStructuredData): FieldRow[] {
     label: l.trade, value: l.count === null ? "count unknown" : String(l.count), band: l.confidence_band, refs: l.source_refs }));
   d.materials.forEach((m, i) => rows.push({ section: "Materials", path: `materials[${i}]`,
     label: m.name, value: m.status ?? "—", band: m.confidence_band, refs: m.source_refs }));
+  d.equipment.forEach((e, i) => rows.push({ section: "Equipment", path: `equipment[${i}]`,
+    label: e.name, value: e.status ?? "—", band: e.confidence_band, refs: e.source_refs }));
+  d.safety_quality.forEach((s, i) => rows.push({ section: "Safety & quality", path: `safety_quality[${i}]`,
+    label: s.note, value: "observation", band: s.confidence_band, refs: s.source_refs }));
   d.blockers.forEach((b, i) => rows.push({ section: "Blockers", path: `blockers[${i}]`,
     label: b.description, value: b.owner ?? "no owner", band: b.confidence_band, refs: b.source_refs }));
   rows.push({ section: "Weather", path: "weather_site_condition", label: "Site condition",

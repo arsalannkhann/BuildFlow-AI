@@ -1,4 +1,4 @@
-import { and, eq, desc } from "drizzle-orm";
+import { and, eq, desc, sql } from "drizzle-orm";
 import type { AppDb } from "@buildflow/db/client";
 import { dailyReports } from "@buildflow/db/schema";
 import { newId } from "@buildflow/domain/ids";
@@ -62,4 +62,26 @@ export async function setCurrentRevision(
 ): Promise<void> {
   await db.update(dailyReports).set({ currentRevisionId: revisionId })
     .where(and(eq(dailyReports.id, id), eq(dailyReports.organizationId, ctx.organizationId)));
+}
+
+/**
+ * Assigns the next per-project DPR number if this report does not have one yet, and
+ * returns it. Mirrors the RFI numbering pattern: max+1 inside the caller's transaction,
+ * with the unique index on (project_id, dpr_number) turning a race into a retryable
+ * conflict rather than a duplicate serial.
+ */
+export async function ensureDprNumber(
+  db: AppDb, ctx: TenantContext, reportId: string,
+): Promise<number> {
+  const report = await getReport(db, ctx, reportId);
+  if (report.dprNumber != null) return report.dprNumber;
+  const rows = (await db.execute(sql`
+    select coalesce(max(dpr_number), 0)::int as max from "daily_report"
+    where organization_id = ${ctx.organizationId} and project_id = ${report.projectId}
+  `) as unknown as { rows: { max: number }[] }).rows;
+  const next = (rows[0]?.max ?? 0) + 1;
+  await db.update(dailyReports).set({ dprNumber: next }).where(and(
+    eq(dailyReports.id, reportId), eq(dailyReports.organizationId, ctx.organizationId),
+  ));
+  return next;
 }
