@@ -311,6 +311,13 @@ export function ReviewClient(props: {
         </section>
       )}
 
+      {["APPROVED", "ISSUED", "SUPERSEDED"].includes(props.status) && props.canReview && (
+        <p className="page-lead">
+          <a href={`/api/reports/${props.reportId}/pdf/internal`}>Internal copy (PDF)</a>
+          {" — the same approved revision plus the internal summary, confidence bands and cited words. Not for client distribution."}
+        </p>
+      )}
+
       {(props.status === "ISSUED" || props.status === "SUPERSEDED") && props.canIssue && (
         <section className="surface-card admin-section" aria-labelledby="client-share">
           <h2 id="client-share">Client sharing</h2>

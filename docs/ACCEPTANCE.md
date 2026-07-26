@@ -28,6 +28,8 @@ deterministic checks.
 | 18 | Export/deletion honor retention and audit policy | lifecycle export, cascading retention and two-owner/grace deletion tests | verified |
 | 19 | Web meets accessibility checks and reflows on mobile/desktop | axe WCAG A/AA scans, keyboard skip link, 320px no-overflow assertion | verified (automated) |
 | 20 | Build, migrations, unit/integration and critical e2e pass | `pnpm verify:release`; PGlite migrations; release evidence record | local pass; real-PG gate open |
+| 21 | Site wording resolves to the project's own records, or asks | resolution cascade suite: deterministic tiers, semantic margin guard, LLM index-clamp and abstention, learned-alias reapplication, end-to-end trail in `run.test.ts` | verified |
+| 22 | The LLM tier cannot introduce a record that does not exist | `entity-resolution.v1` schema strips any name/id/quantity key; out-of-range index and low confidence both degrade to abstention (provider and point-of-use) | verified |
 
 ## Sign-off boundary
 

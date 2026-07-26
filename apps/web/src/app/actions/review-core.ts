@@ -15,9 +15,11 @@ import { recordDecision } from "@buildflow/db/queries/review";
 import { addIssued, latestIssued } from "@buildflow/db/queries/issued";
 import { audit } from "@buildflow/db/queries/audit";
 import { renderDprPdf, TEMPLATE_VERSION } from "@buildflow/pdf/render";
+import type { DocumentVariant, DprPdfInput } from "@buildflow/pdf/template";
 import type { DprStructuredData } from "@buildflow/domain/dpr/schema";
 import { emitEvent } from "@/core/notifications-core";
 import { projectReportDocument } from "@/core/search-core";
+import { reportingDepth } from "@/core/reporting-core";
 
 export async function approveReport(db: AppDb, ctx: TenantContext, reportId: string): Promise<void> {
   assertCan(ctx, "report.approve");
@@ -38,18 +40,18 @@ export async function requestChanges(db: AppDb, ctx: TenantContext, reportId: st
   await emitEvent(db, ctx, { eventKind: "report.rejected", subjectRef: reportId, projectId: report.projectId, title: `Changes requested on DPR ${report.reportDate}` });
 }
 
-export async function issueReport(db: AppDb, storage: StoragePort, ctx: TenantContext, reportId: string): Promise<string> {
-  assertCan(ctx, "report.issue");
+/**
+ * Assembles every input the DPR document renders, for either variant, WITHOUT writing
+ * anything. Both the issued client document and the on-demand internal copy come from the
+ * same approved revision, so they can never disagree about the day's record.
+ */
+export async function buildDprPdfInput(
+  db: AppDb, storage: StoragePort, ctx: TenantContext, reportId: string,
+  opts: { variant: DocumentVariant; documentId: string; version: number; dprNumber: number | null; approvedAt: string | null },
+): Promise<DprPdfInput> {
   const report = await getReport(db, ctx, reportId);
-  // Approve-before-issue: fail closed BEFORE rendering/storing a PDF or writing an
-  // issued_document row. The UI only hides the button; UI hiding is never authorization.
-  assertTransition(report.status as ReportStatus, "ISSUED");
   const rev = await latestRevision(db, ctx, reportId);
-  if (!rev) throw new Error("No revision to issue");
-
-  const prev = await latestIssued(db, ctx, reportId);
-  const version = (prev?.version ?? 0) + 1;
-  const documentId = newId();
+  if (!rev) throw new Error("No revision to render");
 
   // Embed up to 10 verified photo attachments as evidence pages. Bytes come only from
   // our own storage via stored object keys; encoded server-side as data URIs.
@@ -70,27 +72,58 @@ export async function issueReport(db: AppDb, storage: StoragePort, ctx: TenantCo
   // Document identity and accountable names: a signed DPR cites people and a project,
   // not opaque ids. Lookups are tenant-scoped and failure-tolerant — a missing lookup
   // must not block issuance of an approved record.
-  const dprNumber = await ensureDprNumber(db, ctx, reportId);
   const project = await getProject(db, ctx, report.projectId).catch(() => null);
   const [organization] = await db.select().from(organizations)
     .where(eq(organizations.id, ctx.organizationId));
   const submitter = await getUser(db, ctx, report.createdBy).catch(() => null);
   const approver = await getUser(db, ctx, ctx.userId).catch(() => null);
+  // Tier-2 depth is deterministic arithmetic over stored rows. A gap in the schedule,
+  // labour or Measurement Book records must not block issuing an approved report — the
+  // sections then state what is missing instead.
+  const depth = await reportingDepth(db, ctx, reportId).catch(() => null);
 
-  const pdf = await renderDprPdf({
-    documentId, version, reportDate: report.reportDate,
+  return {
+    documentId: opts.documentId, version: opts.version, reportDate: report.reportDate,
     data: rev.structuredData as DprStructuredData,
     summaryClientSafe: rev.summaryClientSafe ?? "", issuedBy: ctx.userId,
     photos,
-    dprNumber,
+    dprNumber: opts.dprNumber,
     organizationName: organization?.name ?? null,
     projectName: project?.name ?? null,
     clientName: project?.clientName ?? null,
     siteAddress: project?.address ?? null,
     submittedBy: submitter?.displayName ?? null,
     approvedBy: approver?.displayName ?? null,
+    approvedAt: opts.approvedAt,
+    superseded: report.status === "SUPERSEDED",
+    variant: opts.variant,
+    // Client documents never carry the internal summary; the template also refuses it,
+    // so a wiring mistake cannot leak it (design.md §17).
+    summaryInternal: opts.variant === "internal" ? rev.summaryInternal : null,
+    activityProgress: depth?.activityProgress ?? [],
+    trackedBlockers: depth?.trackedBlockers ?? [],
+    productivity: depth?.productivity ?? null,
+  };
+}
+
+export async function issueReport(db: AppDb, storage: StoragePort, ctx: TenantContext, reportId: string): Promise<string> {
+  assertCan(ctx, "report.issue");
+  const report = await getReport(db, ctx, reportId);
+  // Approve-before-issue: fail closed BEFORE rendering/storing a PDF or writing an
+  // issued_document row. The UI only hides the button; UI hiding is never authorization.
+  assertTransition(report.status as ReportStatus, "ISSUED");
+  const rev = await latestRevision(db, ctx, reportId);
+  if (!rev) throw new Error("No revision to issue");
+
+  const prev = await latestIssued(db, ctx, reportId);
+  const version = (prev?.version ?? 0) + 1;
+  const documentId = newId();
+  const dprNumber = await ensureDprNumber(db, ctx, reportId);
+
+  const pdf = await renderDprPdf(await buildDprPdfInput(db, storage, ctx, reportId, {
+    variant: "client", documentId, version, dprNumber,
     approvedAt: new Date().toISOString().slice(0, 16).replace("T", " "),
-  });
+  }));
   const objectKey = `org/${ctx.organizationId}/report/${reportId}/issued/${documentId}.pdf`;
   await storage.put(objectKey, pdf, "application/pdf");
 

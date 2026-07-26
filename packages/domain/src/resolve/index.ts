@@ -21,8 +21,16 @@
  */
 
 import { bestMatch, rankCandidates, normalizeText, MATCH_THRESHOLDS, type Candidate, type MatchResult } from "./match";
-import { parseSpokenQuantity } from "./numbers";
-import { resolveUnit, type CanonicalUnit } from "./units";
+import {
+  formatNumber, foldDigits, numberWordValue, parseNumberToken, parseSpokenQuantity,
+  tokenizeWithOffsets, type Token,
+} from "./numbers";
+import {
+  containsAnyTerm, containsTerm, findAllEntries, findEntry, termPattern, type LexiconEntry,
+} from "./terms";
+import {
+  resolveSpokenUnit, resolveUnit, unitDisplay, type CanonicalUnit, type UnitDisplay,
+} from "./units";
 import { hasNegation, vocabularySeeds, type VocabularyKind } from "./vocabulary";
 
 export type ResolutionMethod = "exact" | "alias" | "fuzzy" | "semantic" | "llm" | "manual" | "unresolved";
@@ -171,13 +179,22 @@ export function readQuantity(phrase: string): QuantityReading {
   let rawUnit: string | null = null;
   for (let i = 0; i < words.length; i += 1) {
     const candidate = [words[i], words[i + 1]].filter(Boolean).join(" ");
-    if (resolveUnit(candidate)) { rawUnit = candidate; break; }
-    if (resolveUnit(words[i])) { rawUnit = words[i]; break; }
+    if (resolveSpokenUnit(candidate)) { rawUnit = candidate; break; }
+    if (resolveSpokenUnit(words[i])) { rawUnit = words[i]; break; }
   }
   const unit = resolveUnit(rawUnit);
   return { value, unit, rawUnit, unitUnknown: value !== null && unit === null };
 }
 
 /** Convenience re-exports so callers import one module. */
-export { hasNegation, MATCH_THRESHOLDS, normalizeText, parseSpokenQuantity, rankCandidates, resolveUnit };
-export type { Candidate, CanonicalUnit, MatchResult };
+export {
+  containsAnyTerm, containsTerm, findAllEntries, findEntry, foldDigits, formatNumber,
+  hasNegation, MATCH_THRESHOLDS, normalizeText, numberWordValue, parseNumberToken,
+  parseSpokenQuantity, rankCandidates, resolveSpokenUnit, resolveUnit, termPattern,
+  tokenizeWithOffsets, unitDisplay,
+};
+export type { Candidate, CanonicalUnit, LexiconEntry, MatchResult, Token, UnitDisplay };
+export {
+  detectNormalizationNeed, hasDevanagari, hinglishMarkers, HINGLISH_MARKERS,
+} from "./language";
+export type { NormalizationNeed, NormalizationReason } from "./language";

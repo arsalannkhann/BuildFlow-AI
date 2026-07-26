@@ -1,12 +1,19 @@
 import { chromium } from "playwright";
 import { dprHtml, type DprPdfInput } from "./template";
-export type { PdfPhoto, DprPdfInput } from "./template";
+export type {
+  PdfPhoto, DprPdfInput, DocumentVariant, ReportFigure, ActivityProgressRow,
+  TrackedBlockerRow, ProductivityUnitRow, ProductivityBlock,
+} from "./template";
 
-// v3 renders every dpr.v1 section (weather, safety/quality and equipment were previously
-// extracted, reviewed and then silently dropped), moves quantities into tables with
-// repeated headers, marks unconfirmed items, and adds page numbers plus a signature block.
-// Historical PDFs keep the template version they were issued with (rules.md §13).
-export const TEMPLATE_VERSION = "dpr-pdf.v3";
+// v4 adds Tier-2 reporting depth: today vs cumulative vs planned per linked schedule
+// activity, certified measurement to date, tracked project blockers separated from the
+// blockers reported in this update, labour productivity with its formula shown, and an
+// internal variant carrying the internal summary, confidence bands and verified quotes.
+// (v3 was the rebuild that stopped silently dropping weather, safety/quality and
+// equipment.) Historical PDFs keep the template version they were issued with, which is
+// why issued_document.template_version is stored per document and never back-filled
+// (rules.md §13).
+export const TEMPLATE_VERSION = "dpr-pdf.v4";
 
 export async function renderDprPdf(input: DprPdfInput): Promise<Uint8Array> {
   const browser = await chromium.launch();
@@ -17,7 +24,7 @@ export async function renderDprPdf(input: DprPdfInput): Promise<Uint8Array> {
     // footer come from Playwright's header/footer templates instead.
     const footer = `<div style="width:100%;padding:0 16mm;font:8pt Inter,Arial,sans-serif;
         color:#6B7280;display:flex;justify-content:space-between;">
-        <span>${input.dprNumber ? `DPR No. ${input.dprNumber} · ` : ""}${input.reportDate} · rev ${input.version}</span>
+        <span>${input.variant === "internal" ? "INTERNAL COPY · " : ""}${input.dprNumber ? `DPR No. ${input.dprNumber} · ` : ""}${input.reportDate} · rev ${input.version}</span>
         <span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span>
       </div>`;
     const pdf = await page.pdf({

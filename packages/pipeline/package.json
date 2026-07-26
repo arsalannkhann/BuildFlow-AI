@@ -16,9 +16,7 @@
     "@buildflow/jobs": "workspace:*",
     "@buildflow/lifecycle": "workspace:*",
     "@buildflow/notify": "workspace:*",
-    "@buildflow/storage": "workspace:*"
-  },
-  "devDependencies": {
+    "@buildflow/storage": "workspace:*",
     "drizzle-orm": "^0.36.0"
   }
 }

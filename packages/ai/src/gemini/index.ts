@@ -10,13 +10,31 @@ import {
   type GroundedAnswer,
   type GroundedAnswerPort,
   type GroundedPassage,
+  type PhotoTaggingPort,
   type SummaryPort,
+  type TranscriptNormalizationPort,
   type TranscriptResult,
   type TranscriptionPort,
+  type EntityResolutionPort,
 } from "../ports";
 import { challanSchema, invoiceExtractionSchema, type ChallanExtraction, type InvoiceExtraction } from "../documents/schema";
 import { groundedAnswerSchema } from "../grounded/schema";
 import { GROUNDED_ANSWER_PROMPT_VERSION, GROUNDED_ANSWER_SYSTEM_PROMPT } from "../grounded/prompt";
+import {
+  SUPPORTED_PHOTO_MIME, clampWorkItemMatch, photoTagSchema, type PhotoTag,
+} from "../photos/schema";
+import { PHOTO_TAGGING_PROMPT_VERSION, PHOTO_TAGGING_SYSTEM_PROMPT, photoTaggingUserPrompt } from "../photos/prompt";
+import { normalizedTranscriptSchema, type NormalizedTranscript } from "../normalize/schema";
+import {
+  TRANSCRIPT_NORMALIZATION_PROMPT_VERSION, TRANSCRIPT_NORMALIZATION_SYSTEM_PROMPT,
+} from "../normalize/prompt";
+import { detectNormalizationNeed } from "../site/language";
+import {
+  alignDecisions, entityResolutionSchema, type EntityChoice, type ResolutionQuestion,
+} from "../resolve/schema";
+import {
+  ENTITY_RESOLUTION_PROMPT_VERSION, ENTITY_RESOLUTION_SYSTEM_PROMPT, entityResolutionUserPrompt,
+} from "../resolve/prompt";
 import {
   CHALLAN_SYSTEM_PROMPT,
   DPR_EXTRACTION_SYSTEM_PROMPT,
@@ -221,6 +239,86 @@ export class GeminiDocumentExtraction implements DocumentExtractionPort {
   }
 }
 
+export class GeminiPhotoTagging implements PhotoTaggingPort {
+  readonly meta;
+
+  constructor(private readonly models: GeminiModels = createModels()) {
+    this.meta = {
+      provider: "gemini", model: configuration().model,
+      promptVersion: PHOTO_TAGGING_PROMPT_VERSION,
+    };
+  }
+
+  async tagPhoto({ imageBytes, contentType, workItemDescriptions }: {
+    imageBytes: Uint8Array; contentType: string; workItemDescriptions: string[];
+  }): Promise<PhotoTag | null> {
+    // An unreadable mime is not an error: the report keeps the photo, it just carries no
+    // machine-read evidence.
+    if (!SUPPORTED_PHOTO_MIME.test(contentType)) return null;
+    const raw = await generateJson(this.models, this.meta.model, PHOTO_TAGGING_SYSTEM_PROMPT, [{
+      role: "user",
+      parts: [
+        { text: photoTaggingUserPrompt(workItemDescriptions) },
+        { inlineData: { data: Buffer.from(imageBytes).toString("base64"), mimeType: contentType } },
+      ],
+    }]);
+    // Schema gate first, then the range gate: a model that answers "index 7" for a report
+    // with three work items has invented a pointer, and it degrades to "no match".
+    return clampWorkItemMatch(photoTagSchema.parse(raw), workItemDescriptions.length);
+  }
+}
+
+export class GeminiTranscriptNormalization implements TranscriptNormalizationPort {
+  readonly meta;
+
+  constructor(private readonly models: GeminiModels = createModels()) {
+    this.meta = {
+      provider: "gemini", model: configuration().model,
+      promptVersion: TRANSCRIPT_NORMALIZATION_PROMPT_VERSION,
+    };
+  }
+
+  async normalize({ transcript }: { transcript: TranscriptResult }): Promise<NormalizedTranscript | null> {
+    const text = transcript.text.trim();
+    if (text.length === 0) return null;
+    // Deterministic gate before spending a provider call — and before showing a reviewer a
+    // "normalized" panel that would only echo English back at them.
+    if (!detectNormalizationNeed({ language: transcript.language, text }).needed) return null;
+    const raw = await generateJson(
+      this.models,
+      this.meta.model,
+      TRANSCRIPT_NORMALIZATION_SYSTEM_PROMPT,
+      JSON.stringify({ source_language: transcript.language, text }),
+    );
+    return normalizedTranscriptSchema.parse(raw);
+  }
+}
+
+export class GeminiEntityResolution implements EntityResolutionPort {
+  readonly meta;
+
+  constructor(private readonly models: GeminiModels = createModels()) {
+    this.meta = {
+      provider: "gemini", model: configuration().reasoningModel,
+      promptVersion: ENTITY_RESOLUTION_PROMPT_VERSION,
+    };
+  }
+
+  async choose({ transcript, questions }: {
+    transcript: string; questions: ResolutionQuestion[];
+  }): Promise<(EntityChoice | null)[]> {
+    // No questions means the deterministic tiers settled everything: spend nothing.
+    if (questions.length === 0) return [];
+    const raw = await generateJson(
+      this.models, this.meta.model, ENTITY_RESOLUTION_SYSTEM_PROMPT,
+      entityResolutionUserPrompt({ transcript, questions }),
+    );
+    // Schema gate, then per-question range and confidence gates: a bad answer becomes an
+    // abstention here, never a link to the wrong project record.
+    return alignDecisions(entityResolutionSchema.parse(raw), questions);
+  }
+}
+
 export function geminiRegistry(): AiRegistry {
   const models = createModels();
   return {
@@ -230,5 +328,8 @@ export function geminiRegistry(): AiRegistry {
     documents: new GeminiDocumentExtraction(models),
     embeddings: new GeminiEmbeddings(models),
     grounded: new GeminiGroundedAnswer(models),
+    photos: new GeminiPhotoTagging(models),
+    normalization: new GeminiTranscriptNormalization(models),
+    resolution: new GeminiEntityResolution(models),
   };
 }

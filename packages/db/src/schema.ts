@@ -941,6 +941,13 @@ export const reportEntityLinks = pgTable("report_entity_link", {
   rawText: text("raw_text").notNull(),
   method: text("method").notNull(), // alias | exact | fuzzy | semantic | llm | manual | unresolved
   score: numeric("score", { precision: 5, scale: 4 }),
+  // The shortlist the cascade was choosing between, ranked. Kept so the review screen can
+  // show WHAT was considered and not just what won: an unmatched phrase with three ranked
+  // options is a decision a reviewer can make in one click, while a bare "not matched" next
+  // to a dropdown of every record on the project is a research task.
+  candidates: jsonb("candidates").$type<{ id: string; name: string; score: number }[]>(),
+  /** One line from the LLM tier explaining its pick. Displayed, never used as a value. */
+  reason: text("reason"),
   confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
   confirmedBy: text("confirmed_by"),
   createdAt: ts(),

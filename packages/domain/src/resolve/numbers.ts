@@ -20,8 +20,10 @@ const UNITS: Record<string, number> = {
   forty: 40, fifty: 50, sixty: 60, seventy: 70, eighty: 80, ninety: 90,
   // Hinglish / transliterated Hindi (common spelling variants included deliberately)
   shunya: 0, ek: 1, do: 2, teen: 3, tin: 3, char: 4, char_: 4, chaar: 4, panch: 5,
-  paanch: 5, pach: 5, chhe: 6, che: 6, chha: 6, chhah: 6, chey: 6, saat: 7, sat: 7,
-  aath: 8, ath: 8, nau: 9, no: 9, das: 10, dus: 10, gyarah: 11, gyara: 11, barah: 12,
+  paanch: 5, pach: 5, chhe: 6, che: 6, chha: 6, chhah: 6, chah: 6, chey: 6, saat: 7, sat: 7,
+  // "no" is deliberately NOT nine. It is English negation and the spoken form of the unit
+  // "nos", so reading it as a number turns "no cement came" into a quantity of nine.
+  aath: 8, ath: 8, nau: 9, das: 10, dus: 10, gyarah: 11, gyara: 11, barah: 12,
   bara: 12, terah: 13, tera: 13, chaudah: 14, chauda: 14, pandrah: 15, pandra: 15,
   solah: 16, sola: 16, satrah: 17, satra: 17, atharah: 18, athara: 18, unnis: 19,
   bees: 20, bis: 20, ikkis: 21, bais: 22, tais: 23, chaubis: 24, pachchis: 25,
@@ -65,19 +67,68 @@ const DEVANAGARI_DIGITS: Record<string, string> = {
   "५": "5", "६": "6", "७": "7", "८": "8", "९": "9",
 };
 
-const toAsciiDigits = (value: string): string =>
+/** Devanagari digits map 1:1 onto ASCII, so this substitution keeps every string index. */
+export const foldDigits = (value: string): string =>
   value.replace(/[०-९]/g, (d) => DEVANAGARI_DIGITS[d] ?? d);
 
 /** Trims trailing zeros so 2.50 and 2.5 compare equal downstream. */
-function toDecimalString(value: number): string {
+export function formatNumber(value: number): string {
   if (!Number.isFinite(value)) return "0";
   // Quantities on site are never more precise than 3 decimals.
   const fixed = value.toFixed(3);
   return fixed.replace(/\.?0+$/, "") || "0";
 }
 
+export type Token = { text: string; start: number; end: number };
+
+// \p{M} matters: Devanagari matras are combining MARKS, so a class of only letters and
+// numbers splits "मजदूर" into fragments and every Hindi count is lost.
+const TOKEN_PATTERN = /[\p{L}\p{N}\p{M}]+(?:[.,][\p{L}\p{N}\p{M}]+)*/gu;
+
+/**
+ * Word tokens with their character offsets. Offsets are what let a caller cite the exact
+ * words a number came from, and pair a number with the unit spoken next to it.
+ */
+export function tokenizeWithOffsets(text: string): Token[] {
+  const out: Token[] = [];
+  for (const match of text.matchAll(TOKEN_PATTERN)) {
+    out.push({ text: match[0], start: match.index, end: match.index + match[0].length });
+  }
+  return out;
+}
+
+/**
+ * Value of ONE number word, or null. Every table in this module is consulted, because a
+ * single spoken word can be a digit word ("chaar"), a multiplier ("hazar"), a fixed fraction
+ * ("dhai") or a bare modifier ("sava" = one and a quarter) — a caller reading word by word
+ * must resolve all four the same way `parseSpokenQuantity` does, or the same transcript
+ * yields two different numbers depending on which entry point read it.
+ */
+export function numberWordValue(token: string): number | null {
+  const word = token.toLowerCase();
+  if (UNITS[word] !== undefined) return UNITS[word];
+  if (MULTIPLIERS[word] !== undefined) return MULTIPLIERS[word];
+  if (FIXED_FRACTIONS[word] !== undefined) return FIXED_FRACTIONS[word];
+  // A modifier with nothing following it modifies one: "sava kilo" is 1.25 kg.
+  if (MODIFIERS[word] !== undefined) return MODIFIERS[word](1);
+  return null;
+}
+
+/**
+ * Numeric value of a single token, word or digits, else null.
+ * Grouping commas are dropped; "2,5" is not a number.
+ */
+export function parseNumberToken(token: string): number | null {
+  const word = numberWordValue(token);
+  if (word !== null) return word;
+  const digits = foldDigits(token.toLowerCase());
+  if (!/^\d+(?:,\d{2,3})*(?:\.\d+)?$/.test(digits)) return null;
+  const value = Number(digits.replaceAll(",", ""));
+  return Number.isFinite(value) ? value : null;
+}
+
 export const tokenizeSpokenNumber = (text: string): string[] =>
-  toAsciiDigits(text.toLowerCase())
+  foldDigits(text.toLowerCase())
     .replace(/[,؍]/g, "")
     .split(/[\s/]+/)
     .map((t) => t.replace(/^[^0-9a-zऀ-ॿ.]+|[^0-9a-zऀ-ॿ.]+$/g, ""))
@@ -163,6 +214,10 @@ export function parseSpokenQuantity(text: string): string | null {
     if (started) break; // a non-numeric word ends the quantity
   }
 
+  // A modifier that never found a number modifies one: "sava kilo" is 1.25 kg and "paune
+  // ghanta" is 45 minutes. Returning null here would drop a quantity the engineer did state.
+  if (pendingModifier && current === null && acc.total === null) current = pendingModifier(1);
+
   flushCurrent();
   if (acc.total === null) return null;
   let result = acc.total;
@@ -170,5 +225,5 @@ export function parseSpokenQuantity(text: string): string | null {
     const fraction = Number(`0.${decimalDigits}`);
     if (Number.isFinite(fraction)) result += fraction;
   }
-  return toDecimalString(result);
+  return formatNumber(result);
 }

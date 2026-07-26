@@ -1,182 +1,25 @@
-import { and, eq, isNull, or, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import type { AppDb } from "@buildflow/db/client";
 import type { TenantContext } from "@buildflow/domain/tenancy";
 import { assertCan } from "@buildflow/domain/tenancy";
 import { newId } from "@buildflow/domain/ids";
 import { reportEntityLinks, termAliases } from "@buildflow/db/schema";
-import { listActivities, listLocations } from "@buildflow/db/queries/reference";
-import { listMaterials } from "@buildflow/db/queries/materials";
-import { listScheduleItems } from "@buildflow/db/queries/controls";
 import { audit } from "@buildflow/db/queries/audit";
-import type { DprStructuredData } from "@buildflow/domain/dpr/schema";
-import {
-  hasNegation, readQuantity, resolveTerm,
-  type AliasEntry, type Candidate, type Resolution,
-} from "@buildflow/domain/resolve";
 
 /**
- * Application tier of entity resolution: loads the project's own vocabulary, runs the
- * deterministic cascade from @buildflow/domain/resolve, and records how every phrase was
- * mapped so the decision is auditable and correctable.
+ * Review-side of entity resolution: reading the trail the pipeline produced, and correcting it.
  *
- * The rules that protect the record (rules.md §11):
- *   - resolution NEVER edits a claim; it only attaches links and normalised readings
- *   - an unconfident mapping is stored as a SUGGESTION for the reviewer, not applied
- *   - a reviewer's correction is LEARNED as a project alias, so the same words resolve
- *     next time without asking — the accuracy of a project improves with its own history
+ * Producing the mapping lives in `@buildflow/pipeline/entity-resolution` because it runs in
+ * the worker, where the report is processed. It is re-exported here so a request path can
+ * recompute on demand (a reviewer who has just added the missing location wants the mapping
+ * re-run without re-recording the site update) without a second implementation of the
+ * cascade drifting away from the one that actually writes reports.
  */
-
-export type EntityKind = "location" | "activity" | "material" | "schedule_item" | "trade" | "unit";
-
-export type FieldResolution = {
-  fieldPath: string;
-  entityKind: EntityKind;
-  resolution: Resolution;
-  /** Normalised quantity reading where the phrase carried one. */
-  quantity?: { value: string | null; unitCode: string | null; unitUnknown: boolean };
-  /** True when the phrase reads as an absence/shortage rather than a positive event. */
-  negated?: boolean;
-};
-
-type ProjectVocabulary = {
-  locations: Candidate[];
-  activities: Candidate[];
-  materials: Candidate[];
-  scheduleItems: Candidate[];
-  aliases: AliasEntry[];
-};
-
-/** Loads everything the cascade needs for one project in a single pass. */
-export async function loadProjectVocabulary(
-  db: AppDb, ctx: TenantContext, projectId: string,
-): Promise<ProjectVocabulary> {
-  const [locations, activities, materials, scheduleItems, aliasRows] = await Promise.all([
-    listLocations(db, ctx, projectId).catch(() => []),
-    listActivities(db, ctx, projectId).catch(() => []),
-    listMaterials(db, ctx).catch(() => []),
-    listScheduleItems(db, ctx, projectId).catch(() => []),
-    db.select().from(termAliases).where(and(
-      eq(termAliases.organizationId, ctx.organizationId),
-      or(isNull(termAliases.projectId), eq(termAliases.projectId, projectId)),
-    )).catch(() => []),
-  ]);
-
-  return {
-    locations: locations.map((l) => ({ id: l.id, name: l.name, extra: l.kind })),
-    activities: activities.map((a) => ({ id: a.id, name: a.name, extra: a.unit })),
-    materials: materials.map((m) => ({ id: m.id, name: m.name, extra: m.unit })),
-    scheduleItems: scheduleItems.map((s) => ({ id: s.id, name: s.name })),
-    aliases: aliasRows.map((row) => ({
-      kind: row.kind,
-      alias: row.alias,
-      canonicalValue: row.canonicalValue,
-      canonicalId: row.canonicalId,
-      projectScoped: row.projectId !== null,
-    })),
-  };
-}
-
-const recordsFor = (vocab: ProjectVocabulary, kind: EntityKind): Candidate[] => {
-  switch (kind) {
-    case "location": return vocab.locations;
-    case "activity": return vocab.activities;
-    case "material": return vocab.materials;
-    case "schedule_item": return vocab.scheduleItems;
-    default: return [];
-  }
-};
-
-/** Maps our entity kinds onto the seeded vocabulary kinds. */
-const vocabKindFor = (kind: EntityKind): string =>
-  kind === "schedule_item" ? "activity" : kind;
-
-/**
- * Resolves every referenceable phrase in an extracted DPR. Pure with respect to the report:
- * it returns findings and never mutates the structured data.
- */
-export function resolveReportEntities(
-  data: DprStructuredData, vocab: ProjectVocabulary,
-): FieldResolution[] {
-  const out: FieldResolution[] = [];
-  const run = (phrase: string | null, kind: EntityKind, fieldPath: string) => {
-    if (!phrase) return;
-    const resolution = resolveTerm({
-      phrase, kind: vocabKindFor(kind),
-      records: recordsFor(vocab, kind), learned: vocab.aliases,
-    });
-    out.push({ fieldPath, entityKind: kind, resolution });
-  };
-
-  data.work_items.forEach((item, i) => {
-    run(item.location, "location", `work_items[${i}].location`);
-    run(item.activity ?? item.description, "activity", `work_items[${i}].activity`);
-    // A work item's description often carries the reference to the planned activity.
-    run(item.description, "schedule_item", `work_items[${i}].schedule_item`);
-    const reading = readQuantity(
-      [item.quantity.value, item.quantity.unit, item.description].filter(Boolean).join(" "));
-    out.push({
-      fieldPath: `work_items[${i}].quantity`, entityKind: "unit",
-      resolution: {
-        rawText: `${item.quantity.value ?? ""} ${item.quantity.unit ?? ""}`.trim(),
-        method: reading.unit ? "alias" : "unresolved",
-        canonicalValue: reading.unit?.code ?? null,
-        entityId: null, score: reading.unit ? 1 : null, candidates: [],
-        confident: Boolean(reading.unit),
-      },
-      quantity: {
-        value: reading.value, unitCode: reading.unit?.code ?? null, unitUnknown: reading.unitUnknown,
-      },
-    });
-  });
-
-  data.labour.forEach((row, i) => run(row.trade, "trade", `labour[${i}].trade`));
-
-  data.materials.forEach((row, i) => {
-    const phrase = [row.name, row.status].filter(Boolean).join(" ");
-    const resolution = resolveTerm({
-      phrase: row.name, kind: "material",
-      records: vocab.materials, learned: vocab.aliases,
-    });
-    out.push({
-      fieldPath: `materials[${i}].name`, entityKind: "material", resolution,
-      negated: hasNegation(phrase),
-    });
-  });
-
-  data.equipment.forEach((row, i) => {
-    const resolution = resolveTerm({
-      phrase: row.name, kind: "equipment", records: [], learned: vocab.aliases,
-    });
-    out.push({ fieldPath: `equipment[${i}].name`, entityKind: "activity", resolution });
-  });
-
-  return out;
-}
-
-/**
- * Persists resolutions as an append-only trail. Confident mappings are stored as applied;
- * everything else is stored unconfirmed so the review screen can offer the shortlist.
- */
-export async function recordResolutions(
-  db: AppDb, ctx: TenantContext,
-  input: { reportId: string; projectId: string; revisionId?: string | null; findings: FieldResolution[] },
-): Promise<void> {
-  if (input.findings.length === 0) return;
-  await db.insert(reportEntityLinks).values(input.findings.map((finding) => ({
-    id: newId(),
-    organizationId: ctx.organizationId,
-    projectId: input.projectId,
-    reportId: input.reportId,
-    revisionId: input.revisionId ?? null,
-    fieldPath: finding.fieldPath,
-    entityKind: finding.entityKind,
-    entityId: finding.resolution.entityId,
-    canonicalValue: finding.resolution.canonicalValue,
-    rawText: finding.resolution.rawText,
-    method: finding.resolution.method,
-    score: finding.resolution.score === null ? null : finding.resolution.score.toFixed(4),
-  })));
-}
+export {
+  loadProjectVocabulary, recordResolutions, refineResolutions, resolveAndRecord,
+  resolveReportEntities,
+} from "@buildflow/pipeline/entity-resolution";
+export type { EntityKind, FieldResolution, ProjectVocabulary } from "@buildflow/pipeline/entity-resolution";
 
 export async function listResolutions(db: AppDb, ctx: TenantContext, reportId: string) {
   return db.select().from(reportEntityLinks).where(and(
@@ -211,17 +54,41 @@ export async function confirmResolution(
 
   if (input.learn !== false && link.rawText.trim()) {
     const alias = link.rawText.trim().toLowerCase();
-    await db.insert(termAliases).values({
-      id: newId(),
-      organizationId: ctx.organizationId,
-      projectId: link.projectId,
-      kind: link.entityKind === "schedule_item" ? "activity" : link.entityKind,
-      alias,
+    const kind = link.entityKind === "schedule_item" ? "activity" : link.entityKind;
+    // A re-correction MUST overwrite the learned alias, not be dropped. If a reviewer first
+    // taught "mistri" -> Mason and later corrects it to Carpenter, a plain insert-or-ignore
+    // would fix this one report but leave the stale alias in place, and every future report
+    // would keep resolving "mistri" -> Mason confidently with no prompt — a silent, permanent
+    // corruption of the learning loop.
+    //
+    // A learned alias is always project-scoped (report_entity_link.project_id is NOT NULL), so
+    // the existing row is matched directly on its concrete project id — no need to reproduce
+    // the `coalesce(project_id,'')` expression from the unique index, which never collides a
+    // project-scoped learned alias with an org-scoped seed anyway.
+    const learned = {
       canonicalValue: input.canonicalValue ?? alias,
       canonicalId: input.entityId,
-      source: "learned",
+      source: "learned" as const,
       confirmedBy: ctx.userId,
-    }).onConflictDoNothing();
+    };
+    const [existing] = await db.select({ id: termAliases.id }).from(termAliases).where(and(
+      eq(termAliases.organizationId, ctx.organizationId),
+      eq(termAliases.projectId, link.projectId),
+      eq(termAliases.kind, kind),
+      eq(termAliases.alias, alias),
+    ));
+    if (existing) {
+      await db.update(termAliases).set(learned).where(eq(termAliases.id, existing.id));
+    } else {
+      await db.insert(termAliases).values({
+        id: newId(),
+        organizationId: ctx.organizationId,
+        projectId: link.projectId,
+        kind,
+        alias,
+        ...learned,
+      }).onConflictDoNothing(); // backstop against a concurrent confirm of the same phrase
+    }
   }
 
   await audit(db, ctx, {

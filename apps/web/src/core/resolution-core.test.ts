@@ -135,6 +135,46 @@ test("a reviewer's correction is learned and applied to the NEXT report", async 
   expect(after[0].resolution.confident).toBe(true);
 });
 
+test("re-correcting an already-learned alias overwrites it, never keeps the stale mapping", async () => {
+  const { db, ctx } = await setup();
+
+  // First the site teaches "chadar" -> the TMT steel row.
+  const first = resolveReportEntities(dpr({
+    materials: [{ name: "chadar", status: "used", quantity: null, unit: null, ...supported }],
+  }), await loadProjectVocabulary(db, ctx, SEED.projectId));
+  await recordResolutions(db, ctx, {
+    reportId: "rep-a", projectId: SEED.projectId, revisionId: null, findings: first,
+  });
+  const [linkA] = await listResolutions(db, ctx, "rep-a");
+  await confirmResolution(db, ctx, {
+    linkId: linkA.id, entityId: "mat-steel", canonicalValue: "TMT steel Fe 500D",
+  });
+
+  // Then a reviewer decides that on THIS project "chadar" actually means the cement row.
+  const second = resolveReportEntities(dpr({
+    materials: [{ name: "chadar", status: "used", quantity: null, unit: null, ...supported }],
+  }), await loadProjectVocabulary(db, ctx, SEED.projectId));
+  await recordResolutions(db, ctx, {
+    reportId: "rep-b", projectId: SEED.projectId, revisionId: null, findings: second,
+  });
+  const [linkB] = await listResolutions(db, ctx, "rep-b");
+  await confirmResolution(db, ctx, {
+    linkId: linkB.id, entityId: "mat-cement", canonicalValue: "Cement OPC 53",
+  });
+
+  // Exactly one learned row survives, carrying the CORRECTION — not the stale first answer.
+  const learned = await db.select().from(termAliases).where(eq(termAliases.alias, "chadar"));
+  expect(learned).toHaveLength(1);
+  expect(learned[0].canonicalId).toBe("mat-cement");
+  expect(learned[0].canonicalValue).toBe("Cement OPC 53");
+
+  // And the next report resolves to the corrected record, with no reviewer prompt.
+  const next = resolveReportEntities(dpr({
+    materials: [{ name: "chadar", status: "used", quantity: null, unit: null, ...supported }],
+  }), await loadProjectVocabulary(db, ctx, SEED.projectId));
+  expect(next[0].resolution.entityId).toBe("mat-cement");
+});
+
 test("confirmation requires review capability and is audited", async () => {
   const { db, ctx } = await setup();
   const engineer = { ...(await resolveTenantContext(db, SEED.engineer.id)), projectId: SEED.projectId };

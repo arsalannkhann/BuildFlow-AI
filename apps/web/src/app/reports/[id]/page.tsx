@@ -13,6 +13,8 @@ import { listClientLinks } from "@buildflow/db/queries/client-links";
 import { listReportLinks, listScheduleItems } from "@buildflow/db/queries/controls";
 import { linkReportAction, raiseBlockerAction } from "@/app/actions/controls";
 import { getProject } from "@buildflow/db/queries/projects";
+import { ResolutionPanel } from "./ResolutionPanel";
+import { listResolutions, loadProjectVocabulary } from "@/core/resolution-core";
 
 export default async function ReportPage({ params, searchParams }: {
   params: Promise<{ id: string }>;
@@ -44,6 +46,21 @@ export default async function ReportPage({ params, searchParams }: {
   const scheduleLinks = canLinkSchedule
     ? await withTenant(db, projectCtx, (tx) => listReportLinks(tx, projectCtx, { reportId: id })) : [];
   const canTrackBlockers = isApproved && ctx.capabilities.includes("blocker.manage");
+
+  // How the site's own wording was mapped onto this project's records. Read-only here;
+  // corrections go through confirmResolutionAction and are learned for the project.
+  const resolutions = await withTenant(db, projectCtx, (tx) =>
+    listResolutions(tx, projectCtx, id)).catch(() => []);
+  const vocabulary = resolutions.length > 0
+    ? await withTenant(db, projectCtx, (tx) =>
+        loadProjectVocabulary(tx, projectCtx, report.projectId)).catch(() => null)
+    : null;
+  const optionsByKind: Record<string, { id: string; name: string }[]> = vocabulary ? {
+    location: vocabulary.locations.map((c) => ({ id: c.id, name: c.name })),
+    activity: vocabulary.activities.map((c) => ({ id: c.id, name: c.name })),
+    material: vocabulary.materials.map((c) => ({ id: c.id, name: c.name })),
+    schedule_item: vocabulary.scheduleItems.map((c) => ({ id: c.id, name: c.name })),
+  } : {};
   const extractedBlockers = canTrackBlockers && rev
     ? (rev.structuredData as DprStructuredData).blockers : [];
 
@@ -72,6 +89,14 @@ export default async function ReportPage({ params, searchParams }: {
           .filter((l) => !l.revokedAt && l.expiresAt.getTime() > Date.now())
           .map((l) => ({ id: l.id, expiresAt: l.expiresAt.toISOString() }))}
       />
+      {resolutions.length > 0 ? (
+        <ResolutionPanel
+          reportId={id}
+          rows={resolutions}
+          optionsByKind={optionsByKind}
+          canReview={canReview}
+        />
+      ) : null}
       {canLinkSchedule ? (
         <section className="page-shell surface-card admin-section" aria-labelledby="rep-schedule">
           <h2 id="rep-schedule">Schedule links</h2>

@@ -394,6 +394,44 @@ biometrics; Measurement Book ships as “e-MB Preview” pending legal review.
 **Reason:** Indic language, code-mixing, noise, accuracy, latency, and cost cannot be selected reliably from marketing claims.  
 **Revisit when:** Field evaluation establishes a stable default or customer data-location requirements constrain providers.
 
+### 2026-07-26 — Entity resolution is the product, and the LLM tier is index-only
+
+**Decision:** Site speech is mapped onto each project's own records by a six-tier cascade
+(`exact` → `alias` → `fuzzy` → `semantic` → `llm` → `unresolved`), and the LLM tier may only
+return an INDEX into a server-built shortlist of at most five real records, or abstain.
+`low` confidence is an abstention; `medium` is recorded but never applied without a human.
+Full design in `docs/ENTITY-RESOLUTION.md`.
+
+**Reason:** A paragraph produced from a voice note cannot be billed, scheduled, or reconciled
+against a stock ledger — only a linked row can. But a wrong link does not look like a mistake,
+it looks like data, and a false quantity against the wrong BOQ line gets billed. Making the
+model structurally incapable of naming an entity (no field exists for it in
+`entity-resolution.v1`) is the only version of this that is safe to run unattended: the worst
+available failure is picking the wrong one of five real records, which a reviewer can see and
+overturn.
+
+**Evidence:** 41 Hinglish/Hindi/English eval fixtures, 158 assertions, 94.9% against the
+deterministic mock with zero critical errors — a floor on the plumbing, NOT a measurement of
+Gemini, because the mock and fixtures share an author. Tests assert the properties that matter
+rather than the score: a near-tie in embedding space becomes a reviewer question, a fabricated
+index becomes an abstention, an unavailable provider leaves open questions instead of failing
+the report, and the cap on model questions reports what it dropped.
+
+**Revisit when:** Real providers are benchmarked on consented field audio (EXPANSION-ROADMAP
+R1), or the confirmation rate shows reviewers routinely overturning a specific tier.
+
+### 2026-07-26 — Accuracy comes from the confirmation loop, not from prompts
+
+**Decision:** A reviewer's correction is stored as a project-scoped alias and applied to the
+next report automatically.
+
+**Reason:** Site dialect is local — a term used on one project in Nagpur is not the term used on
+another in Kochi. Chasing that with prompt edits is unbounded and unversionable; learning it from
+the project's own confirmed history is bounded, auditable, and improves without our involvement.
+
+**Revisit when:** Learned aliases start colliding across projects in one organization, or a
+confirmed alias is found to have been wrong and needs a retraction path.
+
 ## 15. Research log
 
 ### 2026-07-13 — Source roadmap reviewed
@@ -459,7 +497,8 @@ For each change:
 
 ## 18. Immediate next actions
 
-1. Obtain the mandatory second review of migration 0011, RLS, registration and lifecycle code.
+1. Obtain the mandatory second review of migration 0011, RLS, registration and lifecycle code,
+   and of migrations 0015–0017 (DPR numbering, term aliases + resolution trail, shortlist columns).
 2. Run F-W1 on disposable real PostgreSQL and attach the successful CI/terminal evidence.
 3. Provision an approved India-region private Supabase bucket and complete F-W2 in staging.
 4. Exercise offline capture/restart/reconnect on a representative low-end Android device.

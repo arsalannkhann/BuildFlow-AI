@@ -1,3 +1,4 @@
+import { and, eq } from "drizzle-orm";
 import type { AppDb } from "@buildflow/db/client";
 import type { TenantContext } from "@buildflow/domain/tenancy";
 import { DPR_SCHEMA_VERSION, dprSchema } from "@buildflow/domain/dpr/schema";
@@ -8,8 +9,13 @@ import { addRevision } from "@buildflow/db/queries/revisions";
 import { getReport, setReportStatus, setCurrentRevision } from "@buildflow/db/queries/reports";
 import { startRun, finishRun, recordStage } from "@buildflow/db/queries/processing";
 import { audit } from "@buildflow/db/queries/audit";
+import { attachments as attachmentTable } from "@buildflow/db/schema";
 import { notifyEvent } from "@buildflow/notify/emit";
 import { getStorage } from "@buildflow/storage/factory";
+import { probeAudioDuration } from "./audio-duration";
+import { attachPhotoEvidence } from "./photo-evidence";
+import { buildNormalizedTranscript, storeNormalizedTranscript } from "./transcript-normalization";
+import { resolveAndRecord } from "./entity-resolution";
 
 export async function runProcessing(db: AppDb, ctx: TenantContext, reportId: string): Promise<void> {
   const ai = getAiRegistry();
@@ -28,9 +34,24 @@ export async function runProcessing(db: AppDb, ctx: TenantContext, reportId: str
     if (!audio) throw Object.assign(new Error("No audio attachment"), { category: "invalid_input" });
     await recordStage(db, runId, "validateManifest", "succeeded", 0);
 
+    // Stage: probe media. Reads the recording length out of the container so the reviewer
+    // can be warned about a six-second "daily update". Null when the container does not say
+    // — an unknown duration produces no signal rather than a fabricated one.
+    failedStage = "probeMedia";
+    const audioBytes = await storage.get(audio.objectKey);
+    const probe = probeAudioDuration(audioBytes);
+    if (probe && audio.durationMs !== probe.durationMs) {
+      await db.update(attachmentTable)
+        .set({ durationMs: probe.durationMs })
+        .where(and(
+          eq(attachmentTable.id, audio.id),
+          eq(attachmentTable.organizationId, ctx.organizationId),
+        ));
+    }
+    await recordStage(db, runId, "probeMedia", "succeeded", 0);
+
     // Stage: transcribe
     failedStage = "transcribe";
-    const audioBytes = await storage.get(audio.objectKey);
     const transcript = await ai.transcription.transcribe({ audioBytes });
     await recordStage(db, runId, "transcribe", "succeeded", 0);
 
@@ -41,10 +62,36 @@ export async function runProcessing(db: AppDb, ctx: TenantContext, reportId: str
     const extracted = dprSchema.parse(await ai.extraction.extract({ transcript }));
     await recordStage(db, runId, "extract", "succeeded", 0);
 
-    // Stage: deterministic validation
+    // Stage: deterministic validation, now including the recording-quality signals. A short
+    // or near-silent recording downgrades every Supported item to Check and raises an issue;
+    // it NEVER rejects the report — the engineer's work is preserved either way.
     failedStage = "validate";
-    const { data } = runDeterministicValidations(extracted, transcript.text);
+    const validated = runDeterministicValidations(extracted, transcript.text, {
+      durationMs: probe?.durationMs ?? audio.durationMs ?? null,
+      transcriptText: transcript.text,
+    });
+    const qualityIssues = validated.issues.filter(
+      (issue) => issue.code === "audio_too_short" || issue.code === "transcript_sparse_for_duration",
+    );
     await recordStage(db, runId, "validate", "succeeded", 0);
+
+    // Stage: photo evidence. Links photos to the work items they show so `attachment_id`
+    // citations are real. Evidence only — it can add source refs and nothing else.
+    failedStage = "tagPhotos";
+    const photos = atts
+      .filter((a) => a.kind === "photo" && a.uploadedAt !== null)
+      .map((a) => ({ id: a.id, objectKey: a.objectKey, contentType: a.contentType }));
+    const tagging = await attachPhotoEvidence({
+      ai, storage, data: validated.data, photos,
+    });
+    const data = tagging.data;
+    await recordStage(db, runId, "tagPhotos", "succeeded", 0);
+
+    // Stage: normalized transcript. Hindi/Hinglish updates get an English rendering stored
+    // beside the original; English updates produce nothing at all.
+    failedStage = "normalizeTranscript";
+    const normalized = await buildNormalizedTranscript({ ai, transcript });
+    await recordStage(db, runId, "normalizeTranscript", "succeeded", 0);
 
     // Stage: summaries
     failedStage = "summarize";
@@ -57,19 +104,59 @@ export async function runProcessing(db: AppDb, ctx: TenantContext, reportId: str
       reportId, structuredData: data, isAiGenerated: true,
       summaryInternal: summaries.internal, summaryClientSafe: summaries.clientSafe, transcript,
     });
+    // Additive: the original transcript above is already stored and is never rewritten.
+    if (normalized) await storeNormalizedTranscript(db, ctx, rev.id, normalized);
     await setCurrentRevision(db, ctx, reportId, rev.id);
     await setReportStatus(db, ctx, reportId, "AWAITING_REVIEW");
     await recordStage(db, runId, "createRevision", "succeeded", 0);
 
+    // Stage: entity resolution. Maps the engineer's own words onto this project's locations,
+    // activities, materials and units so the report can be reconciled against the schedule
+    // and the stock ledger instead of being read by eye. It only ever ATTACHES links beside
+    // the claim — the revision written above is never rewritten — so a failure here costs
+    // reviewer convenience, not the record. That is why it runs after the revision exists
+    // and cannot fail the run.
+    failedStage = "resolveEntities";
+    const saved = await getReport(db, ctx, reportId);
+    const resolution = await resolveAndRecord(db, ctx, {
+      ai, reportId, projectId: saved.projectId, revisionId: rev.id,
+      data, transcript: transcript.text,
+    }).catch(() => null);
+    await recordStage(db, runId, "resolveEntities", resolution ? "succeeded" : "failed", 0);
+
     await finishRun(db, ctx, runId, "succeeded");
-    await audit(db, ctx, { action: "report.processed", subjectRef: reportId, metadata: { runId } });
+    await audit(db, ctx, {
+      action: "report.processed", subjectRef: reportId,
+      // Counts and codes only — never a caption, quote or transcript line (rules.md §14).
+      metadata: {
+        runId,
+        audioDurationMs: probe?.durationMs ?? null,
+        audioDurationSource: probe?.source ?? null,
+        photosConsidered: tagging.considered,
+        photosLinked: tagging.linked,
+        photosFailed: tagging.failed,
+        transcriptNormalized: normalized !== null,
+        // Counts only: how many spoken phrases were mapped, and by which tier (rules.md §14).
+        entityPhrases: resolution?.total ?? null,
+        entityLinked: resolution?.linked ?? null,
+        entityOpen: resolution?.open ?? null,
+        entityBySemantic: resolution?.semantic ?? null,
+        entityByLlm: resolution?.llm ?? null,
+        entityLlmAbstained: resolution?.llmAbstained ?? null,
+        qualityIssues: qualityIssues.map((issue) => issue.code),
+      },
+    });
     // Phase E1 hook: reviewers learn a draft is ready. Title carries a record reference
     // only — never extracted content (rules.md §14). Deliver jobs land on this same
     // queue, so the running drain loop / worker picks them up next.
-    const done = await getReport(db, ctx, reportId);
     await notifyEvent(db, ctx, {
-      eventKind: "report.awaiting_review", subjectRef: reportId, projectId: done.projectId,
-      title: `DPR ${done.reportDate} is ready for review`,
+      eventKind: "report.awaiting_review", subjectRef: reportId, projectId: saved.projectId,
+      title: `DPR ${saved.reportDate} is ready for review`,
+      // The recording-quality warning travels with the notification so a reviewer sees it
+      // before opening the draft. It states measurements about the recording, not content.
+      body: qualityIssues.length > 0
+        ? qualityIssues.map((issue) => issue.message).join(" ")
+        : undefined,
     });
   } catch (err) {
     const category = (err as { category?: string })?.category ?? "processing_error";
