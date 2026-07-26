@@ -1,8 +1,10 @@
 import { getDb } from "@buildflow/db/client";
 import { withTenant } from "@buildflow/db/tenant";
 import { currentContext } from "@/app/session";
-import { getReport } from "@buildflow/db/queries/reports";
+import { getReport, previousReportData } from "@buildflow/db/queries/reports";
 import { latestRevision } from "@buildflow/db/queries/revisions";
+import { checkConsistency } from "@buildflow/domain/dpr/consistency";
+import { ConsistencyPanel } from "./ConsistencyPanel";
 import { listAttachments } from "@buildflow/db/queries/attachments";
 import { buildFieldRows } from "../view-model";
 import { ReviewClient } from "./ReviewClient";
@@ -64,6 +66,17 @@ export default async function ReportPage({ params, searchParams }: {
   const extractedBlockers = canTrackBlockers && rev
     ? (rev.structuredData as DprStructuredData).blockers : [];
 
+  // Contractual consistency, computed fresh from the current revision (blueprint §8.2). Uses
+  // the prior day's report for the cross-day checks; both reads fail soft so a review page
+  // never breaks over an advisory panel.
+  const consistencyFindings = rev
+    ? await withTenant(db, projectCtx, async (tx) => {
+        const previous = await previousReportData(tx, projectCtx, report.projectId, report.reportDate)
+          .catch(() => null);
+        return checkConsistency(rev.structuredData as DprStructuredData, { previous });
+      }).catch(() => [])
+    : [];
+
   const processing = report.status === "UPLOADED" || report.status === "PROCESSING";
   return (
     <>
@@ -89,6 +102,7 @@ export default async function ReportPage({ params, searchParams }: {
           .filter((l) => !l.revokedAt && l.expiresAt.getTime() > Date.now())
           .map((l) => ({ id: l.id, expiresAt: l.expiresAt.toISOString() }))}
       />
+      <ConsistencyPanel findings={consistencyFindings} />
       {resolutions.length > 0 ? (
         <ResolutionPanel
           reportId={id}

@@ -6,7 +6,8 @@ import { runDeterministicValidations } from "@buildflow/domain/dpr/validate";
 import { getAiRegistry } from "@buildflow/ai/registry";
 import { listAttachments } from "@buildflow/db/queries/attachments";
 import { addRevision } from "@buildflow/db/queries/revisions";
-import { getReport, setReportStatus, setCurrentRevision } from "@buildflow/db/queries/reports";
+import { getReport, previousReportData, setReportStatus, setCurrentRevision } from "@buildflow/db/queries/reports";
+import { checkConsistency } from "@buildflow/domain/dpr/consistency";
 import { startRun, finishRun, recordStage } from "@buildflow/db/queries/processing";
 import { audit } from "@buildflow/db/queries/audit";
 import { attachments as attachmentTable } from "@buildflow/db/schema";
@@ -124,6 +125,18 @@ export async function runProcessing(db: AppDb, ctx: TenantContext, reportId: str
     }).catch(() => null);
     await recordStage(db, runId, "resolveEntities", resolution ? "succeeded" : "failed", 0);
 
+    // Stage: contractual consistency (blueprint §8.2). Cross-field and cross-day checks that
+    // ask whether the report contradicts itself or omits the evidence a claim needs. Advisory
+    // only — like the resolution stage it runs after the revision exists, never edits it, and
+    // cannot fail the run. Findings ride the review notification so a reviewer sees them first.
+    failedStage = "checkConsistency";
+    const previous = await previousReportData(db, ctx, saved.projectId, saved.reportDate)
+      .catch(() => null);
+    const consistency = (() => {
+      try { return checkConsistency(data, { previous }); } catch { return []; }
+    })();
+    await recordStage(db, runId, "checkConsistency", "succeeded", 0);
+
     await finishRun(db, ctx, runId, "succeeded");
     await audit(db, ctx, {
       action: "report.processed", subjectRef: reportId,
@@ -144,6 +157,8 @@ export async function runProcessing(db: AppDb, ctx: TenantContext, reportId: str
         entityByLlm: resolution?.llm ?? null,
         entityLlmAbstained: resolution?.llmAbstained ?? null,
         qualityIssues: qualityIssues.map((issue) => issue.code),
+        // Codes only — a consistency finding names a field and a rule, never report content.
+        consistencyFindings: consistency.map((finding) => finding.code),
       },
     });
     // Phase E1 hook: reviewers learn a draft is ready. Title carries a record reference
@@ -152,10 +167,11 @@ export async function runProcessing(db: AppDb, ctx: TenantContext, reportId: str
     await notifyEvent(db, ctx, {
       eventKind: "report.awaiting_review", subjectRef: reportId, projectId: saved.projectId,
       title: `DPR ${saved.reportDate} is ready for review`,
-      // The recording-quality warning travels with the notification so a reviewer sees it
-      // before opening the draft. It states measurements about the recording, not content.
-      body: qualityIssues.length > 0
-        ? qualityIssues.map((issue) => issue.message).join(" ")
+      // The recording-quality warning and any consistency questions travel with the
+      // notification so a reviewer sees them before opening the draft. Both describe the
+      // record and the recording — never quote its content (rules.md §14).
+      body: [...qualityIssues, ...consistency].length > 0
+        ? [...qualityIssues.map((i) => i.message), ...consistency.map((f) => f.message)].join(" ")
         : undefined,
     });
   } catch (err) {

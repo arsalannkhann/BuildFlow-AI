@@ -1,6 +1,6 @@
 import { CHALLAN_SCHEMA_VERSION, INVOICE_SCHEMA_VERSION } from "../documents/schema";
 
-export const GEMINI_DPR_PROMPT_VERSION = "dpr-extraction.v2";
+export const GEMINI_DPR_PROMPT_VERSION = "dpr-extraction.v3";
 export const GEMINI_DOCUMENT_PROMPT_VERSION = "document-extraction.v1";
 export const GEMINI_SUMMARY_PROMPT_VERSION = "dpr-summary.v1";
 export const GEMINI_TRANSCRIPTION_PROMPT_VERSION = "field-transcription.v1";
@@ -18,7 +18,13 @@ export const DPR_EXTRACTION_SYSTEM_PROMPT =
   "translate, or reconstruct. Quotes are checked against the transcript and discarded when " +
   "they do not match, which downgrades the item to Check. If nothing in the transcript " +
   "supports an item, omit the item rather than citing unrelated words. Also copy the " +
-  "startMs/endMs of the segment the quote came from when a segment contains it.";
+  "startMs/endMs of the segment the quote came from when a segment contains it. " +
+  // Additive dpr.v1 fields (blueprint §2). Only ever populated from what the engineer states.
+  "When the engineer gives plant hours, set the equipment item's active_hours, idle_hours and " +
+  "idle_reason; leave them null otherwise — never assume a machine ran all day. When weather " +
+  "is reported at specific times, add environmental_conditions entries with time_label and any " +
+  "of temperature_c, wind_beaufort (0-12), rainfall_mm and impact_on_work that were actually " +
+  "stated, each with its own source_refs; do not fabricate a reading that was not spoken.";
 
 export const SUMMARY_SYSTEM_PROMPT =
   "Write two short summaries from the supplied daily progress report data. Return JSON with internal " +

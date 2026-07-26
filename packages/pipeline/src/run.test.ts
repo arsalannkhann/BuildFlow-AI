@@ -147,6 +147,10 @@ test("processing leaves an auditable trail of how the engineer's words were mapp
   const stages = await db.select().from(processingStages)
     .where(eq(processingStages.name, "resolveEntities"));
   expect(stages.map((stage) => stage.status)).toContain("succeeded");
+  // The contractual consistency stage runs like any other and is visible in the run.
+  const consistencyStage = await db.select().from(processingStages)
+    .where(eq(processingStages.name, "checkConsistency"));
+  expect(consistencyStage.map((stage) => stage.status)).toContain("succeeded");
 
   // The claims themselves are untouched: resolution attaches links, it never edits a report.
   const rev = await latestRevision(db, ctx(), reportId);

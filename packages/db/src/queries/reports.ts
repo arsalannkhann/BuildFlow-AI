@@ -1,9 +1,10 @@
-import { and, eq, desc, sql } from "drizzle-orm";
+import { and, eq, desc, lt, sql } from "drizzle-orm";
 import type { AppDb } from "@buildflow/db/client";
-import { dailyReports } from "@buildflow/db/schema";
+import { dailyReports, reportRevisions } from "@buildflow/db/schema";
 import { newId } from "@buildflow/domain/ids";
 import { assertTransition, type ReportStatus } from "@buildflow/domain/report/state";
 import type { TenantContext } from "@buildflow/domain/tenancy";
+import type { DprStructuredData } from "@buildflow/domain/dpr/schema";
 
 type Report = typeof dailyReports.$inferSelect;
 
@@ -45,6 +46,29 @@ export async function listReports(db: AppDb, ctx: TenantContext): Promise<Report
   return db.select().from(dailyReports)
     .where(eq(dailyReports.organizationId, ctx.organizationId))
     .orderBy(desc(dailyReports.createdAt));
+}
+
+/**
+ * The structured data of the project's most recent report BEFORE `beforeDate` that has a
+ * committed revision. Feeds the cross-day consistency rules (e.g. a machine down yesterday
+ * running today). `report_date` is an ISO date string, so lexical ordering is date ordering.
+ * Returns null when there is no earlier report — the caller's rules simply do not fire.
+ */
+export async function previousReportData(
+  db: AppDb, ctx: TenantContext, projectId: string, beforeDate: string,
+): Promise<DprStructuredData | null> {
+  const [row] = await db
+    .select({ structuredData: reportRevisions.structuredData })
+    .from(dailyReports)
+    .innerJoin(reportRevisions, eq(reportRevisions.id, dailyReports.currentRevisionId))
+    .where(and(
+      eq(dailyReports.organizationId, ctx.organizationId),
+      eq(dailyReports.projectId, projectId),
+      lt(dailyReports.reportDate, beforeDate),
+    ))
+    .orderBy(desc(dailyReports.reportDate))
+    .limit(1);
+  return (row?.structuredData as DprStructuredData | undefined) ?? null;
 }
 
 export async function setReportStatus(
