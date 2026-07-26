@@ -1,4 +1,5 @@
 import type { AppDb } from "@buildflow/db/client";
+import { getSystemDb } from "@buildflow/db/client";
 import type { StoragePort } from "@buildflow/storage/port";
 import type { TenantContext } from "@buildflow/domain/tenancy";
 import { assertCan } from "@buildflow/domain/tenancy";
@@ -194,7 +195,7 @@ export async function retryProcessing(db: AppDb, ctx: TenantContext, reportId: s
     });
     await audit(tx, ctx, { action: "report.processing_retried", subjectRef: reportId });
   });
-  if (inlineJobs()) await drainJobs(db, pipelineJobRegistry);
+  if (inlineJobs()) await drainJobs(await getSystemDb(db), pipelineJobRegistry);
 }
 
 /** PROCESSING_FAILED -> AWAITING_REVIEW with an empty human draft: inputs stay available,

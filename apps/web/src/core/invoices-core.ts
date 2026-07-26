@@ -1,4 +1,5 @@
 import type { AppDb } from "@buildflow/db/client";
+import { getSystemDb } from "@buildflow/db/client";
 import type { StoragePort } from "@buildflow/storage/port";
 import type { TenantContext } from "@buildflow/domain/tenancy";
 import { assertCan, can } from "@buildflow/domain/tenancy";
@@ -66,7 +67,7 @@ export async function createInvoice(db: AppDb, storage: StoragePort, ctx: Tenant
     return invoice.id;
   });
 
-  if (inlineJobs()) await drainJobs(db, pipelineJobRegistry);
+  if (inlineJobs()) await drainJobs(await getSystemDb(db), pipelineJobRegistry);
   // Phase E1 hook: accountants (invoice.review) learn a draft invoice needs review.
   await emitEvent(db, ctx, { eventKind: "invoice.awaiting_review", subjectRef: invoiceId, projectId: input.projectId, title: `Invoice ${input.invoiceNumber?.trim() || "(number pending review)"} awaits review` });
   return invoiceId;

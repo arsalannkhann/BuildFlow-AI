@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { AppDb } from "@buildflow/db/client";
+import { getSystemDb } from "@buildflow/db/client";
 import type { StoragePort } from "@buildflow/storage/port";
 import type { TenantContext } from "@buildflow/domain/tenancy";
 import { assertCan } from "@buildflow/domain/tenancy";
@@ -127,7 +128,7 @@ export async function finalizeReport(
     });
     await audit(tx, ctx, { action: "report.finalized", subjectRef: reportId, metadata: {} });
   });
-  if (inlineJobs()) await drainJobs(db, pipelineJobRegistry);
+  if (inlineJobs()) await drainJobs(await getSystemDb(db), pipelineJobRegistry);
   const after = await getReport(db, ctx, reportId);
   return { reportId, status: after.status };
 }

@@ -1,4 +1,5 @@
 import type { AppDb } from "@buildflow/db/client";
+import { getSystemDb } from "@buildflow/db/client";
 import type { StoragePort } from "@buildflow/storage/port";
 import type { TenantContext } from "@buildflow/domain/tenancy";
 import { assertCan } from "@buildflow/domain/tenancy";
@@ -115,7 +116,7 @@ export async function createReceipt(db: AppDb, storage: StoragePort, ctx: Tenant
     return receipt.id;
   });
 
-  if (inlineJobs()) await drainJobs(db, pipelineJobRegistry);
+  if (inlineJobs()) await drainJobs(await getSystemDb(db), pipelineJobRegistry);
   return receiptId;
 }
 

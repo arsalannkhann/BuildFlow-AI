@@ -1,4 +1,5 @@
 import type { AppDb } from "@buildflow/db/client";
+import { getSystemDb } from "@buildflow/db/client";
 import type { TenantContext } from "@buildflow/domain/tenancy";
 import { cmpDecimal } from "@buildflow/domain/decimal";
 import {
@@ -26,7 +27,7 @@ const inlineJobs = () => (process.env.JOBS_MODE ?? "inline") !== "worker";
  */
 export async function emitEvent(db: AppDb, ctx: TenantContext, input: NotifyInput): Promise<void> {
   await notifyEvent(db, ctx, input);
-  if (inlineJobs()) await drainJobs(db, pipelineJobRegistry);
+  if (inlineJobs()) await drainJobs(await getSystemDb(db), pipelineJobRegistry);
 }
 
 /**

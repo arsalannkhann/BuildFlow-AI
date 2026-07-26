@@ -79,6 +79,7 @@ export async function createDb(dataDir?: string): Promise<AppDb> {
 // in the process.
 const dbGlobal = globalThis as unknown as {
   __buildflowDb?: Promise<AppDb>;
+  __buildflowSystemDb?: Promise<AppDb>;
   __buildflowDbSystem?: boolean;
 };
 
@@ -99,6 +100,46 @@ export function enableSystemMode(): void {
 export function getDb(): Promise<AppDb> {
   if (!dbGlobal.__buildflowDb) dbGlobal.__buildflowDb = createDb();
   return dbGlobal.__buildflowDb;
+}
+
+/**
+ * A system-mode handle for running the job pipeline from a request-serving process.
+ *
+ * The worker enables system mode globally, so every one of its connections carries
+ * `app.system=on` and the pipeline's org-agnostic writes (processing_run, revisions, entity
+ * links) satisfy the `system_access` RLS policy. A web process CANNOT enable system mode
+ * globally — its request connections must stay tenant-isolated — but under JOBS_MODE=inline it
+ * ALSO drains the queue after a request, running the very same pipeline. Those writes have no
+ * single `app.org_id` to bind, so against a real (RLS-enforcing) Postgres they were failing
+ * with "new row violates row-level security policy". This returns the system-mode handle that
+ * path needs.
+ *
+ * `fallback` is the caller's current handle, returned unchanged in every case that does not
+ * need a distinct system pool:
+ * - Global system process (the worker): its connections already carry `app.system=on`.
+ * - PGlite (zero-dependency dev, and the in-memory `createTestDb()` handle in tests): it runs
+ *   as the bootstrap superuser, which bypasses RLS entirely, so no separate context is needed —
+ *   and a second PGlite instance over the same data is unsupported (see the singleton note).
+ * Only the remaining case — a real, RLS-enforcing Postgres in a tenant web process — gets a
+ * dedicated pool whose connections set `app.system=on`, and it is created lazily so the pool
+ * exists only when inline draining actually runs.
+ */
+export function getSystemDb(fallback: AppDb): Promise<AppDb> {
+  if (dbGlobal.__buildflowDbSystem || !process.env.DATABASE_URL) return Promise.resolve(fallback);
+  if (!dbGlobal.__buildflowSystemDb) dbGlobal.__buildflowSystemDb = createSystemPool();
+  return dbGlobal.__buildflowSystemDb;
+}
+
+async function createSystemPool(): Promise<AppDb> {
+  const pool = new pg.Pool({
+    connectionString: process.env.DATABASE_URL,
+    max: Number(process.env.DATABASE_POOL_MAX ?? 10),
+  });
+  pool.on("connect", (client) => {
+    void client.query("select set_config('app.system', 'on', false)");
+  });
+  // No migration here: getDb() already migrated the primary pool against the same database.
+  return drizzlePg(pool, { schema }) as unknown as AppDb;
 }
 
 export async function createTestDb(): Promise<AppDb> {
