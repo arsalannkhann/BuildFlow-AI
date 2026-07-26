@@ -3,8 +3,21 @@ import { ensureBooted } from "@buildflow/db/boot";
 import { findPendingInvitation } from "@buildflow/db/queries/invitations";
 import { acceptInviteAction } from "@/app/actions/admin";
 
-export default async function InvitePage({ params }: { params: Promise<{ token: string }> }) {
+const INVITE_ERRORS: Record<string, string> = {
+  email_taken: "That email already has a BuildFlow account. Sign in instead, and ask your "
+    + "administrator to add you to this project.",
+  limited: "Too many attempts. Please wait a few minutes and try again.",
+  invalid: "Something was off with the details. Please check and try again.",
+};
+
+export default async function InvitePage({ params, searchParams }: {
+  params: Promise<{ token: string }>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const { token } = await params;
+  const query = (await searchParams) ?? {};
+  const errorCode = typeof query.error === "string" ? query.error : null;
+  const errorMessage = errorCode ? (INVITE_ERRORS[errorCode] ?? INVITE_ERRORS.invalid) : null;
   await ensureBooted();
   const db = await getDb();
   const invitation = token === "invalid" ? null : await findPendingInvitation(db, token);
@@ -27,6 +40,7 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
         <p className="eyebrow">You’re invited</p>
         <h1>Join BuildFlow as {invitation.role.replaceAll("_", " ")}</h1>
         <p>Create your account to start working with your team.</p>
+        {errorMessage ? <p role="alert" className="login-error">{errorMessage}</p> : null}
         <form action={acceptInviteAction} className="admin-form">
           <input type="hidden" name="token" value={token} />
           <label>Your name<input name="displayName" required maxLength={120} /></label>

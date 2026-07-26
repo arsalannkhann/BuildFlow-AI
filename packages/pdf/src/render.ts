@@ -1,4 +1,3 @@
-import { chromium } from "playwright";
 import { dprHtml, type DprPdfInput } from "./template";
 export type {
   PdfPhoto, DprPdfInput, DocumentVariant, ReportFigure, ActivityProgressRow,
@@ -16,6 +15,12 @@ export type {
 export const TEMPLATE_VERSION = "dpr-pdf.v4";
 
 export async function renderDprPdf(input: DprPdfInput): Promise<Uint8Array> {
+  // Loaded on demand, not at module scope: importing this module (e.g. from a page that only
+  // needs the HTML template or the TEMPLATE_VERSION) must not require playwright, which is a
+  // heavy server-external dependency present only where PDFs are actually rendered. Importing
+  // it eagerly crashed any page whose graph touched this file with "Cannot find module
+  // 'playwright'".
+  const { chromium } = await import("playwright");
   const browser = await chromium.launch();
   try {
     const page = await browser.newPage();

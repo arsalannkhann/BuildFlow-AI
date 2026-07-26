@@ -1,5 +1,3 @@
-import { chromium } from "playwright";
-
 export const COMPLIANCE_COVER_TEMPLATE_VERSION = "compliance-cover.v1";
 
 const escapeHtml = (value: string): string => value
@@ -32,6 +30,10 @@ export async function renderComplianceCoverPdf(input: {
     <div class="summary"><div><strong>${input.requirements.total}</strong>Total</div><div><strong>${input.requirements.satisfied}</strong>Satisfied</div><div><strong>${input.requirements.notApplicable}</strong>N/A</div><div><strong>${input.requirements.pending}</strong>Pending</div></div>
     ${review}<div class="note"><strong>Important:</strong> ${escapeHtml(input.legalCaution)}</div>
   </body></html>`;
+  // Loaded on demand so importing this module (the compliance dashboard page reaches it
+  // through compliance-core just to show counts) never requires playwright — which is not in
+  // the page bundle and made the page 500 with "Cannot find module 'playwright'".
+  const { chromium } = await import("playwright");
   const browser = await chromium.launch();
   try {
     const page = await browser.newPage();

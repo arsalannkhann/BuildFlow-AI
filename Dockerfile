@@ -61,6 +61,14 @@ RUN set -eux; \
     STANDALONE=/app/apps/web/.next/standalone; \
     mkdir -p "$STANDALONE/node_modules/@electric-sql"; \
     cp -RL /app/packages/db/node_modules/@electric-sql/pglite "$STANDALONE/node_modules/@electric-sql/pglite"; \
+    # playwright is a server-external package, so Next leaves a runtime require() for it but
+    # never traces it into the standalone tree. Without it the issued-PDF routes AND any page
+    # whose graph touches @buildflow/pdf 500 with "Cannot find module 'playwright'". Copy both
+    # playwright and its playwright-core dependency out of the pnpm store beside the server.
+    mkdir -p "$STANDALONE/apps/web/node_modules"; \
+    PW_NM="$(dirname "$(readlink -f /app/packages/pdf/node_modules/playwright)")"; \
+    cp -RL "$PW_NM/playwright" "$STANDALONE/apps/web/node_modules/playwright"; \
+    cp -RL "$PW_NM/playwright-core" "$STANDALONE/apps/web/node_modules/playwright-core"; \
     # Next excludes .next/static and public/ from standalone output: the server expects them
     # beside itself, otherwise every CSS/JS asset 404s and the app renders unstyled.
     cp -R /app/apps/web/.next/static "$STANDALONE/apps/web/.next/static"; \

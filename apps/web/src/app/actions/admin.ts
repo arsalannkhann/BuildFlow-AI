@@ -221,12 +221,23 @@ export async function acceptInviteAction(formData: FormData): Promise<void> {
     scope: "invite-accept", key: `${ip}:${token}`, limit: 20, windowMs: 15 * 60_000,
   });
   if (!limit.allowed) redirect(`/invite/${encodeURIComponent(token)}?error=limited`);
-  const accepted = await acceptInvitationAndCreateAccount(db, {
-    token,
-    displayName: str(formData, "displayName"),
-    password,
-    email: opt(formData, "email") ?? undefined,
-  });
+  let accepted: Awaited<ReturnType<typeof acceptInvitationAndCreateAccount>>;
+  try {
+    accepted = await acceptInvitationAndCreateAccount(db, {
+      token,
+      displayName: str(formData, "displayName"),
+      password,
+      email: opt(formData, "email") ?? undefined,
+    });
+  } catch (error) {
+    // An email can own only one account across the whole platform (user_email_unique). If the
+    // invitee already has one, creating a second violates the constraint — surface that as a
+    // "sign in instead" prompt on the invite page rather than an unhandled 500 (digest error).
+    if (error instanceof Error && /unique|duplicate|conflict|23505/i.test(error.message)) {
+      redirect(`/invite/${encodeURIComponent(token)}?error=email_taken`);
+    }
+    throw error;
+  }
   if (!accepted) redirect("/invite/invalid");
   const signedIn = await getAuth().signInWithPassword(db, accepted.email, password);
   if (signedIn) {
